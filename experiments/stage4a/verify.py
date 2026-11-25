@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """Verify Stage 4A inputs and collect signoff metadata from LibreLane 3.0.14."""
 import argparse
-from collections import defaultdict
+from collections import Counter, defaultdict
+from decimal import Decimal
+from fnmatch import fnmatchcase
 from hashlib import sha256
 import json
+import math
 import os
 from pathlib import Path
 import re
+import struct
 
 ROOT = Path(__file__).resolve().parents[2]
 RUN = ROOT / "runs/wokwi"
@@ -18,6 +22,17 @@ COUNT_METRICS = {
     "setup_violations": "timing__setup_vio__count",
     "hold_violations": "timing__hold_vio__count",
 }
+DRV_NAMES = {"slew_violations": "max slew", "cap_violations": "max cap",
+             "fanout_violations": "max fanout"}
+PHYSICAL_ZERO = {
+    "route_drc_errors": "route__drc_errors",
+    "magic_drc_errors": "magic__drc_error__count",
+    "lvs_errors": "design__lvs_error__count",
+    "antenna_nets": "antenna__violating__nets",
+    "antenna_pins": "antenna__violating__pins",
+    "critical_disconnected_pins": "design__critical_disconnected_pin__count",
+}
+LIBRARY = "gf180mcu_fd_sc_mcu7t5v0__"
 
 
 def read(path):
@@ -30,9 +45,12 @@ def match(label, actual, expected):
 
 
 def verify_inputs(manifest):
+    match("RTL file inventory", sorted(p.relative_to(ROOT).as_posix() for p in (ROOT / "src").rglob("*.v")),
+          sorted(p for p in manifest["input_sha256"] if p.startswith("src/") and p.endswith(".v")))
     for relative, digest in manifest["input_sha256"].items():
         actual = sha256((ROOT / relative).read_bytes()).hexdigest()
         match(relative, actual, digest)
+    return len(manifest["input_sha256"])
 
 
 def identify(manifest, tools_sha):
@@ -40,6 +58,7 @@ def identify(manifest, tools_sha):
     return {
         "variant": manifest["variant"],
         "reference_commit": manifest["reference_commit"],
+        "parent_commit": manifest["parent_commit"],
         "commit": os.environ["GITHUB_SHA"],
         "run_id": os.environ["GITHUB_RUN_ID"],
         "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
@@ -58,7 +77,8 @@ def single_step(suffix):
     return steps[0]
 
 
-def verify_toolchain(manifest, outcome):
+def verify_toolchain(manifest, outcome, tools_sha):
+    match("checked-out tt-support-tools revision", tools_sha, manifest["tools_sha"])
     resolved = read(RUN / "resolved.json")
     for key, value in manifest["expected_resolved"].items():
         match(key, resolved[key], value)
@@ -66,7 +86,11 @@ def verify_toolchain(manifest, outcome):
     match("LibreLane version", resolved["meta"]["librelane_version"], pdk["FLOW_VERSION"])
     if not resolved["FP_DEF_TEMPLATE"].endswith(manifest["def_template_suffix"]):
         raise ValueError("Unexpected Tiny Tapeout DEF template")
+    for corner in manifest["expected_resolved"]["STA_CORNERS"]:
+        match(f"Liberty match for {corner}", sum(fnmatchcase(corner, pattern) for pattern in resolved["LIB"]), 1)
     for corner, paths in resolved["LIB"].items():
+        if not paths:
+            raise ValueError(f"No Liberty for {corner}")
         for path in paths:
             if pdk["PDK_VERSION"] not in Path(path).parts:
                 raise ValueError(f"Unexpected Liberty PDK version for {corner}")
@@ -75,8 +99,35 @@ def verify_toolchain(manifest, outcome):
     merged = read(ROOT / "src/config_merged.json")
     for key, value in manifest["config_changes"].items():
         match("merged " + key, merged[key], value)
-    if list(RUN.glob("*-openroad-repairdesignpostgrt")):
-        raise ValueError("B01 unexpectedly ran post-GRT design repair")
+    rtl = sorted(str(ROOT / name) for name in manifest["input_sha256"]
+                 if name.startswith("src/") and name.endswith(".v"))
+    match("effective RTL paths", sorted(resolved["VERILOG_FILES"]), rtl)
+    return {"librelane": pdk["FLOW_VERSION"], "pdk": pdk, "tools_sha": tools_sha}
+
+
+def verify_repair(manifest):
+    repair = single_step("openroad-repairdesignpostgrt")
+    state = read(repair / "state_out.json")
+    for view in ("odb", "def", "nl"):
+        path = routed_view(state[view])
+        if path.parent != repair or not path.is_file():
+            raise ValueError(f"Post-GRT output {view} was not produced by {repair.name}")
+    log = (repair / "openroad-repairdesignpostgrt.log").read_text(encoding="utf-8")
+    command = re.findall(r"^\+ repair_design\b[^\n]*", log, re.M)
+    match("executed Post-GRT repair_design commands", len(command), 1)
+    expected = manifest["expected_resolved"]
+    for option in ("slew", "cap"):
+        margin = re.search(rf" -{option}_margin (\d+(?:\.\d+)?)\b", command[0])
+        match(f"executed Post-GRT {option} margin", float(margin[1]) if margin else None,
+              expected[f"GRT_DESIGN_REPAIR_MAX_{option.upper()}_PCT"])
+    prefix = lambda path: int(path.name.partition("-")[0])
+    if not prefix(single_step("openroad-globalrouting")) < prefix(repair) < prefix(
+            single_step("openroad-detailedrouting")):
+        raise ValueError("Post-GRT repair is outside the global-to-detailed routing sequence")
+    follower = next(path for path in sorted(RUN.glob("[0-9]*-*/state_in.json"))
+                    if prefix(path.parent) > prefix(repair))
+    match("step following Post-GRT uses its ODB", read(follower)["odb"], state["odb"])
+    return {"step": repair.name, "command": command[0], "next_step": follower.parent.name}
 
 
 def routed_view(path):
@@ -84,34 +135,68 @@ def routed_view(path):
     return RUN / artifact.parent.name / artifact.name
 
 
-def clock_topology(netlist):
+def def_section(text, name):
+    header = re.search(rf"^{name}\s+(\d+)\s*;\s*\n(.*?)^END {name}\b", text, re.M | re.S)
+    entries = re.findall(r"^\s*-\s+(\S+)\s+(.*?)\s*;", header[2], re.M | re.S)
+    match(f"DEF {name} count", len(entries), int(header[1]))
+    result = dict(entries)
+    match(f"unique DEF {name}", len(result), len(entries))
+    return result
+
+
+def clock_topology(netlist, def_text, cells, expected_ff_count):
     """Trace actual clocks from the top clock port through the routed netlist."""
     loads = defaultdict(list)
-    inst_re = r"^\s*(gf180mcu_fd_sc_mcu7t5v0__\w+)\s+(\S+)\s*\((.*?)\);"
+    drivers = defaultdict(list)
+    inst_re = rf"^\s*({LIBRARY}\w+)\s+(\S+)\s*\((.*?)\);"
     terminal_re = r"\.(\w+)\s*\(\s*(.*?)\s*\)"
+    netlist_ffs = set()
     for master, instance, body in re.findall(inst_re, netlist.read_text(encoding="utf-8"), re.M | re.S):
         terminals = dict(re.findall(terminal_re, body, re.S))
-        out = terminals.get("Z") or terminals.get("ZN")
-        for pin in ("I", "CLK"):
-            if terminals.get(pin):
-                loads[terminals[pin]].append((instance, master, pin, out))
+        out = next(((pin, terminals[pin]) for pin in ("Z", "ZN") if terminals.get(pin)), None)
+        if master.startswith(LIBRARY + "dff"):
+            netlist_ffs.add(instance)
+        for pin, net in terminals.items():
+            if net:
+                table = drivers if pin in {"Z", "ZN", "Q", "QN"} else loads
+                table[net].append((instance, master, pin, out))
+    match("netlist flip-flops", len(netlist_ffs), expected_ff_count)
+    match("DEF flip-flops", {n for n, m in cells.items() if m.startswith(LIBRARY + "dff")}, netlist_ffs)
+    nets = def_section(def_text, "NETS")
+
+    def verify_net(net, expected):
+        connections = set(re.findall(r"\(\s+(\S+)\s+(\S+)\s+\)", nets[net].split("+", 1)[0]))
+        match(f"DEF/netlist clock connections for {net}", sorted(connections), sorted(expected))
+
     roots = loads["clk"]
     match("number of loads on the input clock", len(roots), 1)
     root, master, pin, out = roots[0]
+    match("clock port internal drivers", drivers["clk"], [])
+    verify_net("clk", {("PIN", "clk"), (root, pin)})
     if pin != "I" or not out:
         raise ValueError("Clock input is not attached to a driving buffer")
     tree, pending, visited, all_ffs = [], [(out, root, master, 1)], set(), set()
     while pending:
-        net, driver, cell, depth = pending.pop(0)
+        (output_pin, net), driver, cell, depth = pending.pop(0)
         if net in visited or not loads[net]:
             raise ValueError(f"Unexpected or undriven clock subtree at {net}")
         visited.add(net)
+        match(f"only driver for {net}", [(n, p) for n, _, p, _ in drivers[net]], [(driver, output_pin)])
+        match(f"DEF master of {driver}", cells[driver], cell)
+        verify_net(net, {(driver, output_pin), *((n, p) for n, _, p, _ in loads[net])})
         branches, flip_flops, dummy = [], [], []
         for instance, receiver_master, pin, out in loads[net]:
+            match(f"DEF master of {instance}", cells[instance], receiver_master)
             receiver = {"instance": instance, "master": receiver_master, "pin": pin}
-            if pin == "CLK":
+            if pin == "CLK" and instance in netlist_ffs:
                 flip_flops.append(receiver)
+                if instance in all_ffs:
+                    raise ValueError(f"Flip-flop reached twice: {instance}")
                 all_ffs.add(instance)
+            elif pin != "I" or not receiver_master.startswith(tuple(
+                LIBRARY + family for family in ("clkbuf_", "clkinv_", "buf_")
+            )):
+                raise ValueError(f"Unexpected clock load {instance}/{pin}: {receiver_master}")
             elif out:
                 branches.append(receiver)
                 pending.append((out, instance, receiver_master, depth + 1))
@@ -120,7 +205,7 @@ def clock_topology(netlist):
         tree.append({"net": net, "driver": driver, "master": cell, "depth": depth,
                      "direct_loads": len(loads[net]), "branches": branches,
                      "flip_flops": flip_flops, "dummy_loads": dummy})
-    match("unique CTS flip-flops", len(all_ffs), 61)
+    match("FFs reached by CTS", sorted(all_ffs), sorted(netlist_ffs))
     return tree
 
 
@@ -141,80 +226,201 @@ def worst_violators(report):
     }
 
 
-def collected_metrics(manifest, outcome):
-    sta = single_step("openroad-stapostpnr")
-    state = read(sta / "state_out.json")
-    sdc = routed_view(state["sdc"]).read_text(encoding="utf-8")
-    expected = manifest["expected_resolved"]
-    sdc_checks = {
-        r"^create_clock\b[^\n]* -period\s+([\d.]+)": expected["CLOCK_PERIOD"],
-        r"^set_max_transition\s+([\d.]+) \[current_design\]": expected["MAX_TRANSITION_CONSTRAINT"],
-        r"^set_max_capacitance\s+([\d.]+) \[current_design\]": expected["MAX_CAPACITANCE_CONSTRAINT"],
-        r"^set_max_fanout\s+([\d.]+) \[current_design\]": expected["MAX_FANOUT_CONSTRAINT"],
-    }
-    for pattern, limit in sdc_checks.items():
-        match("routed SDC " + pattern, [float(value) for value in re.findall(pattern, sdc, re.M)], [limit])
+def gds_areas(path):
+    """Read GF180 (0, 0) PR boundaries from the signoff stream, as in the local audit."""
+    data = path.read_bytes()
+    offset = 0
+    cell, kind, layer, purpose, scale = None, None, None, None, None
+    points = defaultdict(list)
+    while offset < len(data):
+        length, record, _ = struct.unpack_from(">HBB", data, offset)
+        if length < 4 or offset + length > len(data):
+            raise ValueError(f"Invalid GDSII record in {path}")
+        payload = data[offset + 4:offset + length]
+        offset += length
+        if record == 3:
+            encoded = payload[8:16]
+            scale = int.from_bytes(encoded[1:], "big") / 2**56 * 16**(encoded[0] - 64) * 1e6
+        elif record == 6:
+            cell = payload.rstrip(b"\0").decode("ascii")
+        elif record in (8, 10, 12, 9, 11, 21, 45):
+            kind, layer, purpose = record, None, None
+        elif record == 13:
+            layer = int.from_bytes(payload, "big")
+        elif record == 14:
+            purpose = int.from_bytes(payload, "big")
+        elif record == 16 and (kind, layer, purpose) == (8, 0, 0):
+            points[cell].extend(struct.iter_unpack(">ii", payload))
+    areas = {}
+    for name, coordinates in points.items():
+        x, y = zip(*coordinates)
+        width, height = (Decimal(str(round((max(axis) - min(axis)) * scale, 6))) for axis in (x, y))
+        areas[name] = width * height
+    return areas
+
+
+def routed_geometry(def_text, gds, manifest):
+    units = int(re.search(r"^UNITS DISTANCE MICRONS (\d+) ;", def_text, re.M)[1])
+    dbu = re.search(r"^DIEAREA \( (-?\d+) (-?\d+) \) \( (-?\d+) (-?\d+) \) ;", def_text, re.M)
+    match("routed DEF die area", [int(value) / units for value in dbu.groups()],
+          manifest["expected_resolved"]["DIE_AREA"])
+    pins = def_section(def_text, "PINS")
+    canonical_pins = json.dumps(sorted((name, " ".join(body.split())) for name, body in pins.items()))
+    match("routed DEF pinout SHA-256", sha256(canonical_pins.encode()).hexdigest(),
+          manifest["def_pins_sha256"])
+    cells = {name: entry.split()[0] for name, entry in def_section(def_text, "COMPONENTS").items()}
+    areas = gds_areas(gds)
+    quantities = Counter(cells.values())
+    per_master = {master: areas[master] * count for master, count in quantities.items()}
+    if not per_master or min(per_master.values()) <= 0:
+        raise ValueError("Missing positive master areas in routed DEF/GDSII")
+    fill = sum(areas[master] for name, master in cells.items() if name.startswith("FILLER_"))
+    taps = sum(per_master.get(LIBRARY + group, 0) for group in ("filltie", "endcap"))
+    total = sum(per_master.values())
+    return cells, {"area_functional_aux_um2": float(total - fill - taps),
+                   "area_with_tap_endcap_um2": float(total - fill), "area_fill_um2": float(fill),
+                   "area_total_um2": float(total), "def_instances": len(cells),
+                   "area_def": "post-fill DEF used by STA",
+                   "area_gds": str(gds.relative_to(RUN))}
+
+
+def signoff_corners(sta, state, manifest):
+    expected = manifest["expected_resolved"]["STA_CORNERS"]
+    match("final STA corner count", len(expected), 9)
+    match("final STA corners", sorted(path.parent.name for path in sta.glob("*/checks.rpt")), sorted(expected))
     metrics = state["metrics"]
-    corners = manifest["expected_resolved"]["STA_CORNERS"]
-    counts = {}
-    for corner in corners:
+    rows = {}
+    for corner in expected:
+        folder = sta / corner
         row = {label: metrics[f"{key}__corner:{corner}"] for label, key in COUNT_METRICS.items()}
-        for slack in ("setup", "hold"):
-            row[f"{slack}_ws_ns"] = metrics[f"timing__{slack}__ws__corner:{corner}"]
-        report = (sta / corner / "checks.rpt").read_text(encoding="utf-8")
-        row.update(worst_violators(report))
-        counts[corner] = row
-    spef_step = single_step("openroad-rcx")
+        checks = (folder / "checks.rpt").read_text(encoding="utf-8")
+        match("checks.rpt corner", set(re.findall(r"^=+ (\w+) Corner ", checks, re.M)), {corner})
+        for label, report_name in DRV_NAMES.items():
+            count = re.findall(rf"^{report_name} violation count (\d+)\s*$", checks, re.M)
+            match(f"{corner} {report_name} checks.rpt count", [int(value) for value in count], [row[label]])
+        for label, delay in (("setup", "max"), ("hold", "min")):
+            slack = metrics[f"timing__{label}__ws__corner:{corner}"]
+            report = (folder / f"ws.{delay}.rpt").read_text(encoding="utf-8")
+            value = float(re.search(rf"^{corner}: (\S+)\s*$", report, re.M)[1])
+            if not math.isfinite(slack):
+                raise ValueError(f"Invalid {label} slack at {corner}")
+            match(f"{corner} {label} worst slack", slack, value)
+            row[f"{label}_ws_ns"] = slack
+        row["unannotated_filtered_nets"] = metrics[f"timing__unannotated_net_filtered__count__corner:{corner}"]
+        row.update(worst_violators(checks))
+        rows[corner] = row
+    return rows
+
+
+def verify_sdc(sta, manifest):
+    state = read(sta / "state_in.json")
+    path = routed_view(state["sdc"])
+    match("effective post-route SDC SHA-256", sha256(path.read_bytes()).hexdigest(), manifest["sdc_sha256"])
+    return str(path.relative_to(RUN))
+
+
+def verify_extraction(sta, manifest):
+    state = read(sta / "state_in.json")
     for model in ("min", "nom", "max"):
-        spef = spef_step / model / Path(state["spef"][f"{model}_*"]).name
+        spef = single_step("openroad-rcx") / model / Path(state["spef"][f"{model}_*"]).name
         with spef.open(encoding="utf-8") as stream:
             header = "".join(stream.readline() for _ in range(10))
-        match(f"OpenROAD extractor {model}", re.search(r'\*VERSION "([^"]+)"', header)[1],
+        match(f"OpenROAD extractor {model}", re.search(r'^\*VERSION "([^"]+)"', header, re.M)[1],
               manifest["openroad_rcx_sha"])
-    routing = read(single_step("openroad-detailedrouting") / "or_metrics_out.json")
-    area = routing["design__instance__area__stdcell"] - sum(
-        routing[f"design__instance__area__class:{group}_cell"] for group in ("tap", "endcap")
-    )
-    final_metrics_path = RUN / "final/metrics.json"
-    if not final_metrics_path.is_file():
-        steps = sorted(RUN.glob("[0-9]*-*/state_out.json"))
-        physical_metrics = read(steps[-1])["metrics"]
+    return manifest["openroad_rcx_sha"]
+
+
+def physical_metrics(outcome):
+    final_metrics = RUN / "final/metrics.json"
+    if final_metrics.is_file():
+        physical = read(final_metrics)
     else:
-        physical_metrics = read(final_metrics_path)
-    cts = single_step("openroad-cts") / "cts.rpt"
+        steps = sorted(RUN.glob("[0-9]*-*/state_out.json"))
+        physical = read(steps[-1])["metrics"]
+    result = {label: physical.get(key) for label, key in PHYSICAL_ZERO.items()}
+    ir_drop = single_step("openroad-irdropreport") / "irdrop.rpt"
+    power_log = ir_drop.read_text(encoding="utf-8")
+    result["power_connected"] = all(f"All shapes on net {net} are connected." in power_log for net in ("VPWR", "VGND"))
+    lvs = single_step("netgen-lvs") / "reports/lvs.netgen.rpt"
+    result["lvs_unique_match"] = "Final result: Circuits match uniquely." in lvs.read_text(encoding="utf-8")
     if outcome == "success":
         identity = read(RUN / "final/commit_id.json")
         recorded = read(ROOT / "stage4a-run.json")
         match("artifact commit", identity["commit"], recorded["commit"])
         match("artifact run URL", identity["workflow_url"], recorded["run_url"])
-    return {
-        "area_functional_aux_um2_approx": round(area, 4),
-        "routed_wirelength_um": routing.get("route__wirelength"),
-        "route_drc_errors": routing.get("route__drc_errors"),
-        "magic_drc_errors": physical_metrics.get("magic__drc_error__count"),
-        "lvs_errors": physical_metrics.get("design__lvs_error__count"),
-        "antenna_nets": physical_metrics.get("antenna__violating__nets"),
-        "antenna_pins": physical_metrics.get("antenna__violating__pins"),
-        "cts_summary": cts.read_text(encoding="utf-8"),
-        "clock_tree": clock_topology(routed_view(state["nl"])),
-        "corners": counts,
-    }
+    return result
 
 
-def verify_run(manifest, outcome):
-    verify_inputs(manifest)
-    result = {"variant": manifest["variant"], "official_build_outcome": outcome}
-    verify_toolchain(manifest, outcome)
-    result.update(collected_metrics(manifest, outcome))
-    (ROOT / "stage4a-physical.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
-    match("routed clock root master", result["clock_tree"][0]["master"],
-          manifest["expected_resolved"]["CTS_ROOT_BUFFER"])
-    for corner, row in result["corners"].items():
-        print(corner, json.dumps(row))
-    if any(row[key] for row in result["corners"].values() for key in COUNT_METRICS):
-        raise ValueError("Electrical or timing violations in post-route signoff")
+def inspect_clock(state, manifest):
+    def_text = routed_view(state["def"]).read_text(encoding="utf-8")
+    cells = {name: body.split()[0] for name, body in def_section(def_text, "COMPONENTS").items()}
+    return clock_topology(routed_view(state["nl"]), def_text, cells, manifest["clock_ff_count"])
+
+
+def inspect_area(state, manifest):
+    top = manifest["expected_resolved"]["DESIGN_NAME"]
+    gds = RUN / "final/gds" / (top + ".gds")
+    if not gds.is_file():
+        gds = single_step("magic-streamout") / (top + ".gds")
+    def_text = routed_view(state["def"]).read_text(encoding="utf-8")
+    _, area = routed_geometry(def_text, gds, manifest)
+    area["meets_final_area_goal"] = area["area_functional_aux_um2"] <= manifest["area_goal_um2"]
+    area["def_source"] = str(routed_view(state["def"]).relative_to(RUN))
+    return area
+
+
+def routed_metrics():
+    routing = read(single_step("openroad-detailedrouting") / "or_metrics_out.json")
+    return {key: routing[key] for key in ("route__wirelength", "route__vias", "design__instance__area__stdcell")}
+
+
+def verify_run(manifest, outcome, tools_sha):
+    result = {"variant": manifest["variant"], "official_build_outcome": outcome, "errors": []}
+    errors = result["errors"]
+
+    def record(key, check, *args):
+        try:
+            result[key] = check(*args)
+        except (KeyError, OSError, ValueError, TypeError, IndexError, StopIteration, struct.error) as exc:
+            errors.append(f"{key}: {exc}")
+        return result.get(key)
+
+    record("input_hashes", verify_inputs, manifest)
+    record("toolchain", verify_toolchain, manifest, outcome, tools_sha)
+    record("repair", verify_repair, manifest)
+    physical = record("physical", physical_metrics, outcome)
+    if physical and (any(physical[key] != 0 for key in PHYSICAL_ZERO)
+                     or not physical["power_connected"] or not physical["lvs_unique_match"]):
+        errors.append("Physical verification, power or pin connectivity criteria failed")
+    routing = record("routing", routed_metrics)
+    sta = record("sta_step", lambda: single_step("openroad-stapostpnr").name)
+    if sta:
+        sta = RUN / sta
+        record("effective_sdc", verify_sdc, sta, manifest)
+        record("openroad_rcx", verify_extraction, sta, manifest)
+        state = record("sta_state", lambda: read(sta / "state_out.json"))
+        if state:
+            result.pop("sta_state")
+            corners = record("corners", signoff_corners, sta, state, manifest)
+            for corner, row in (corners or {}).items():
+                print(corner, json.dumps(row))
+                if (any(row[key] != 0 for key in (*COUNT_METRICS, "unannotated_filtered_nets"))
+                        or min(row["setup_ws_ns"], row["hold_ws_ns"]) < 0):
+                    errors.append(f"{corner}: electric, timing or parasitic annotation criteria failed")
+            tree = record("clock_tree", inspect_clock, state, manifest)
+            if tree and tree[0]["master"] != manifest["expected_resolved"]["CTS_ROOT_BUFFER"]:
+                errors.append(f"Routed clock root master: {tree[0]['master']}")
+            area = record("geometry", inspect_area, state, manifest)
+            if area and not 0 < area["area_functional_aux_um2"] <= manifest["area_limit_um2"]:
+                errors.append("Functional and auxiliary area exceeds the Stage 4A budget")
+            if area and routing and abs(area["area_with_tap_endcap_um2"] -
+                                        routing["design__instance__area__stdcell"]) > 0.1:
+                errors.append("DEF/GDS and OpenROAD area differ by more than 0.1 um²")
     if outcome != "success":
-        raise ValueError(f"Official GDS build reported {outcome}")
+        errors.append(f"Official GDS build reported {outcome}")
+    (ROOT / "stage4a-physical.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    if errors:
+        raise ValueError("; ".join(errors))
 
 
 def main():
@@ -225,6 +431,7 @@ def main():
     metadata.add_argument("tools_sha")
     run = subcommands.add_parser("run")
     run.add_argument("outcome", choices=("success", "failure", "cancelled", "skipped"))
+    run.add_argument("tools_sha")
     args = parser.parse_args()
     manifest = read(MANIFEST)
     try:
@@ -234,7 +441,7 @@ def main():
         elif args.command == "identify":
             print(json.dumps(identify(manifest, args.tools_sha), indent=2))
         else:
-            verify_run(manifest, args.outcome)
+            verify_run(manifest, args.outcome, args.tools_sha)
     except (KeyError, OSError, ValueError, TypeError) as exc:
         parser.exit(1, f"Stage 4A verification failed: {exc}\n")
 

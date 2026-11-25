@@ -1,6 +1,6 @@
 name: gds
 
-run-name: GF180 B01 · ${{ github.ref_name }} · ${{ github.sha }}
+run-name: GF180 C01 · ${{ github.ref_name }} · ${{ github.sha }}
 on: workflow_dispatch
 
 permissions:
@@ -28,19 +28,19 @@ jobs:
           cat stage4a-run.json >> "$GITHUB_STEP_SUMMARY"
       - name: Build GDS
         id: build
-        uses: TinyTapeout/tt-gds-action@ttgf26c
+        uses: TinyTapeout/tt-gds-action@df73a1e7b52e940423ff55f9354b2b8140d38cb7
         with:
           pdk: gf180mcuD
           librelane-version: '3.0.14'
           tools-ref: ${{ steps.preflight.outputs.tools_sha }}
       - name: Check resolved configuration and record physical metrics
         if: always() && steps.preflight.outcome == 'success'
+        shell: bash
         env:
           BUILD_OUTCOME: ${{ steps.build.outcome }}
-          TOOLS_SHA: ${{ steps.preflight.outputs.tools_sha }}
         run: |
-          test "$(git -C tt rev-parse HEAD)" = "$TOOLS_SHA"
-          python3 experiments/stage4a/verify.py run "$BUILD_OUTCOME"
+          actual_tools_sha=$(git -C tt rev-parse HEAD || true)
+          python3 experiments/stage4a/verify.py run "$BUILD_OUTCOME" "$actual_tools_sha"
       - name: Archive provenance
         if: always()
         uses: actions/upload-artifact@v7
@@ -63,7 +63,7 @@ jobs:
     needs: gds
     runs-on: ubuntu-24.04
     steps:
-      - uses: TinyTapeout/tt-gds-action/precheck@ttgf26c
+      - uses: TinyTapeout/tt-gds-action/precheck@df73a1e7b52e940423ff55f9354b2b8140d38cb7
         with:
           tools-ref: ${{ needs.gds.outputs.tools_sha }}
 
@@ -74,6 +74,6 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: TinyTapeout/tt-gds-action/gl_test@ttgf26c
+      - uses: TinyTapeout/tt-gds-action/gl_test@df73a1e7b52e940423ff55f9354b2b8140d38cb7
         with:
           test-dir: test

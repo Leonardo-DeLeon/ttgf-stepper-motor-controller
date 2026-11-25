@@ -62,7 +62,7 @@ def sdc_digest(path):
     return sha256(("\n".join(sorted(lines)) + "\n").encode()).hexdigest()
 
 
-def verify_provenance(output, manifest):
+def verify_provenance(output, manifest, original=None, identity=None):
     actual = read_json(output / "provenance.json")
     match("archived manifest", digest(output / "manifest.json"), digest(MANIFEST))
     for key in ("variant", "base_commit", "repository", "ref", "image"):
@@ -80,15 +80,21 @@ def verify_provenance(output, manifest):
         match("fallback bytes", actual["publication"][FALLBACK], actual["publication"][WORKFLOW])
     match("publication inventory", set(actual["publication"]), publication)
     checkout = MANIFEST.parents[2]
-    for path in sorted(publication - {FALLBACK}):
-        match("publication " + path, actual["publication"][path], digest(checkout / path))
+    published = original if original is not None else checkout
+    if identity is not None:
+        for key in ("commit", "run_id", "attempt", "workflow_ref"):
+            match("checkpoint " + key, actual[key], identity[key])
+    for path in sorted(publication):
+        match("publication " + path, actual["publication"][path], digest(published / path))
     workflow_refs = {f"{actual['repository']}/{path}@{actual['ref']}"
                      for path in publication if path.startswith(".github/workflows/")}
     require(actual["workflow_ref"] in workflow_refs, "Unexpected workflow source ref")
     match("inherited inputs", actual["inputs"], manifest["baseline_inputs"])
     for path, expected in actual["inputs"].items():
-        if path.startswith("src/"):
-            match(path, digest(output / "design/rtl" / Path(path).name), expected)
+        match("original " + path, digest(published / path), expected)
+        match("checkout " + path, digest(checkout / path), expected)
+        if path.startswith("src/") and path.endswith(".v"):
+            match("staged " + path, digest(output / "design/rtl" / Path(path).name), expected)
     for file, expected in manifest["configuration_hashes"].items():
         match(file, digest(output / "design" / file), expected)
         match(file + " publication", actual["publication"]["experiments/stage5/" + file], expected)
@@ -98,12 +104,15 @@ def verify_provenance(output, manifest):
 
 
 def verify_resolved(run, config, manifest):
-    pdk = read_json(run / "pdk.json")
-    for key, value in {"FLOW_NAME": "LibreLane", "FLOW_VERSION": manifest["librelane"],
-                       "PDK": manifest["pdk"], "PDK_SOURCE": "open_pdks",
-                       "PDK_VERSION": manifest["pdk_revision"]}.items():
-        match(key, pdk[key], value)
     resolved = read_json(run / "resolved.json")
+    # The standalone CLI records the effective revision in the Ciel path.
+    # pdk.json is supplied by the Tiny Tapeout flow, not by this E01 run.
+    match("effective PDK", resolved["PDK"], manifest["pdk"])
+    version_root = f"/e01-pdk/ciel/gf180mcu/versions/{manifest['pdk_revision']}"
+    match("effective PDK revision root", resolved["PDK_ROOT"], version_root)
+    match("resolved LibreLane version", resolved["meta"]["librelane_version"], manifest["librelane"])
+    pdk = {"PDK": resolved["PDK"], "PDK_ROOT": resolved["PDK_ROOT"],
+           "PDK_VERSION": manifest["pdk_revision"], "FLOW_VERSION": manifest["librelane"]}
     match("library", resolved["STD_CELL_LIBRARY"], manifest["scl"])
     match("power pins", resolved["SCL_POWER_PINS"], ["VDD", "VNW"])
     match("ground pins", resolved["SCL_GROUND_PINS"], ["VSS", "VPW"])
@@ -350,8 +359,8 @@ def congestion(path, post_repair=True):
     return {"tables": reports, "wirelength_um": int(lengths[-1])}
 
 
-def verify_checkpoint(output, manifest, report):
-    report["provenance"] = verify_provenance(output, manifest)
+def verify_checkpoint(output, manifest, report, original=None, identity=None):
+    report["provenance"] = verify_provenance(output, manifest, original, identity)
     config = read_json(output / "design/config.json")
     run = output / "design/runs/e01-pre-eco"
     report["constraints"] = verify_resolved(run, config, manifest)
@@ -379,7 +388,7 @@ def verify_checkpoint(output, manifest, report):
     log = text(repair / "openroad-repairdesignpostgrt.log")
     for edge in ("min", "max"):
         layer = config["RT_" + edge.upper() + "_LAYER"]
-        require(f"Setting signal {edge} routing layer to: {layer} and clock {edge} routing layer to: {layer}."
+        require(f"Setting signal {edge} routing layer to: {layer} and clock {edge} routing layer to {layer}."
                 in log, f"Missing effective signal/clock {edge} layer evidence")
     document = text(Path(state["def"]))
     units, die = geometry(document)
@@ -399,31 +408,56 @@ def verify_checkpoint(output, manifest, report):
     report["status"] = "partial_checkpoint_verified"
 
 
+def replay_checkpoint(output, original, identity, report):
+    verify_integrity(output)
+    match("original payload manifest", digest(output / "SHA256SUMS"), identity["payload_manifest_sha256"])
+    match("original checkpoint record", digest(output / "checkpoint.json"), identity["checkpoint_record_sha256"])
+    match("original checkpoint provenance", digest(output / "provenance.json"), identity["provenance_sha256"])
+    saved = read_json(output / "checkpoint.json")
+    match("original physical flow return code", saved["flow_status"], 0)
+    match("original native inspection return code", saved["inspection_status"], 0)
+    verify_checkpoint(output, read_json(MANIFEST), report, original, identity)
+    match("original state hash", digest(output / report["checkpoint_state"]), identity["state_sha256"])
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("phase", choices=("checkpoint",))
     parser.add_argument("output", type=Path)
     parser.add_argument("--flow-status", type=int, default=0)
     parser.add_argument("--inspection-status", type=int, default=0)
-    parser.add_argument("--archive", action="store_true", help="Verify existing archive without modifying it")
+    parser.add_argument("--archive", action="store_true", help="Replay an existing sealed archive")
+    parser.add_argument("--e01-original", type=Path, help="Export of the pinned E01 Git commit")
+    parser.add_argument("--report", type=Path, help="Write a separate replay report outside the payload")
     args = parser.parse_args()
+    output = args.output.resolve()
+    if args.e01_original and not args.archive:
+        parser.error("--e01-original requires --archive")
+    if args.report and (not args.archive or args.report.resolve() == output
+                        or output in args.report.resolve().parents):
+        parser.error("--report requires --archive and a path outside the payload")
     report = {"status": "partial_checkpoint_failed", "signoff": "pending",
               "flow_status": args.flow_status, "inspection_status": args.inspection_status}
     try:
-        if args.archive:
-            verify_integrity(args.output)
-            saved = read_json(args.output / "checkpoint.json")
-            match("saved checkpoint status", saved["status"], "partial_checkpoint_verified")
         match("flow return code", args.flow_status, 0)
         match("native inspection return code", args.inspection_status, 0)
-        verify_checkpoint(args.output.resolve(), read_json(MANIFEST), report)
-        if args.archive:
-            # The live report used JSON arrays for tuple-valued pin connections.
-            match("replayed checkpoint report", json.loads(json.dumps(report)), saved)
+        if args.e01_original:
+            identity = read_json(Path(__file__).with_name("continuation.json"))["checkpoint"]
+            replay_checkpoint(output, args.e01_original, identity, report)
+        else:
+            if args.archive:
+                verify_integrity(output)
+                saved = read_json(output / "checkpoint.json")
+                match("saved checkpoint status", saved["status"], "partial_checkpoint_verified")
+            verify_checkpoint(output, read_json(MANIFEST), report)
+            if args.archive:
+                match("replayed checkpoint report", json.loads(json.dumps(report)), saved)
     except (ValueError, KeyError, OSError, TypeError, AttributeError) as error:
         report.update(status="partial_checkpoint_failed", error=str(error))
-    if not args.archive:
-        write_json(args.output / "checkpoint.json", report)
+    if args.report:
+        write_json(args.report, report)
+    elif not args.archive:
+        write_json(output / "checkpoint.json", report)
     print(report["status"], report.get("error", ""))
     return int(report["status"] != "partial_checkpoint_verified")
 

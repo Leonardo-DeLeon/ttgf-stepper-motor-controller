@@ -1,44 +1,68 @@
 name: E01 compact 160x100
-
-run-name: E01 Post-GRT checkpoint · ${{ github.ref_name }} · ${{ github.sha }}
+run-name: E01 continuation from Post-GRT · ${{ github.ref_name }} · ${{ github.sha }}
 on: workflow_dispatch
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
-  checkpoint:
+  continue:
     if: github.ref == 'refs/heads/experiment/stage5-compact' && github.repository == 'Leonardo-DeLeon/ttgf-stepper-motor-controller'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 2
+          fetch-depth: 3
           persist-credentials: false
-      - name: Run standalone E01 through Post-GRT repair
-        timeout-minutes: 32
+      - name: Recover the original E01 checkpoint
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          mkdir -p e01-output e01-artifact
+          set -euo pipefail
+          package=experiments/stage5
+          mkdir e01-resume-report
+          python3 "$package/resume.py" checkout . "$GITHUB_SHA" "$GITHUB_REF" "$GITHUB_REPOSITORY" "$GITHUB_EVENT_NAME" "$GITHUB_WORKFLOW_REF"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/45665082920/attempts/1" > e01-resume-report/actions-original-attempt.json
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/45665082920/artifacts" > e01-resume-report/actions-original-artifacts.json
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/15047420988/zip" > "$RUNNER_TEMP/e01-original.zip"
+          python3 "$package/resume.py" recover "$RUNNER_TEMP/e01-original.zip" e01-resume-work . \
+            e01-resume-report/actions-original-attempt.json e01-resume-report/actions-original-artifacts.json
+      - name: Resume Classic and collect extracted timing
+        timeout-minutes: 30
+        shell: bash
+        run: |
           set -o pipefail
-          bash experiments/stage5/run.sh 2>&1 | tee e01-output/runner.log
-      - name: Seal available logs and views
+          bash experiments/stage5/resume.sh e01-resume-work e01-resume-report 2>&1 | tee e01-resume-report/runner.log
+      - name: Seal evidence by run and attempt
         if: always()
         shell: bash
         run: |
-          mkdir -p e01-output e01-artifact
-          python3 experiments/stage5/prepare.py seal e01-output
-          tar -C e01-output -czf e01-artifact/e01-output.tar.gz .
-          (cd e01-artifact && sha256sum e01-output.tar.gz > SHA256SUMS)
-          cp e01-output/SHA256SUMS e01-artifact/payload.sha256
-          for name in provenance.json checkpoint.json runner.log; do
-            if [[ -f e01-output/$name ]]; then cp "e01-output/$name" e01-artifact/; fi
-          done
-      - name: Upload evidence by run and attempt
+          set -euo pipefail
+          mkdir -p e01-resume-report e01-continuation-artifact
+          if [[ -f e01-resume-work/checkpoint-replay.json ]]; then
+            cp e01-resume-work/{checkpoint-replay,restored-state}.json e01-resume-report/
+          fi
+          if [[ -d e01-resume-work/payload/design/runs/e01-postgrt-reviewed ]]; then
+            cp -r e01-resume-work/payload/design/runs/e01-postgrt-reviewed e01-resume-report/
+            for item in final-native final-native.log directed-signature.json; do
+              if [[ -e "e01-resume-work/payload/$item" ]]; then
+                cp -r "e01-resume-work/payload/$item" e01-resume-report/
+              fi
+            done
+          fi
+          python3 experiments/stage5/prepare.py seal e01-resume-report
+          tar -C e01-resume-report -czf e01-continuation-artifact/e01-continuation.tar.gz .
+          (cd e01-continuation-artifact && sha256sum e01-continuation.tar.gz > SHA256SUMS)
+          cp e01-resume-report/SHA256SUMS e01-continuation-artifact/payload.sha256
+      - name: Upload continuation evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: e01-postgrt-${{ github.run_id }}-${{ github.run_attempt }}
-          path: e01-artifact/
+          name: e01-continuation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: e01-continuation-artifact/
           if-no-files-found: error

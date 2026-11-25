@@ -1,0 +1,38 @@
+{
+  "checkpoint": {
+    "artifact_id": 15047420988,
+    "artifact_name": "e01-postgrt-45665082920-1",
+    "artifact_sha256": "5e2bb6d6d352071c34f03ad2159e6c304dae3b198d8760b34d228545bc768412",
+    "artifact_size": 6491375,
+    "attempt": "1",
+    "base_commit": "100c46eacdc841dafa87b707363bcc5e6a10bff8",
+    "checkpoint_record_sha256": "e01261a9848de998a70e164928f5fe03f7993036981f228493eb7bd21d39d28b",
+    "commit": "b80520c019b5df6ef1d22255c50381bf9fdb671b",
+    "guide_sha256": "ba6ad8e4d81ee7db4b1660d1a9efc474fa385322ba4e09b8e6edb54a9911d9db",
+    "job_id": 139384980014,
+    "manifest_sha256": "1bd57e739bc7cd570b3a4481904f76e8e5fa902d91f9d0d9dbb86e92a584b862",
+    "payload_manifest_sha256": "6d3f3a0bea5f274b5a7f6628e0974d5d965746d105019e3c8b1a99211ada47fe",
+    "provenance_sha256": "255509c5635f68c03e72244c25ef2516e25c49061d716f239c8f8c3173acb367",
+    "ref": "refs/heads/experiment/stage5-compact",
+    "repository": "Leonardo-DeLeon/ttgf-stepper-motor-controller",
+    "run_id": "45665082920",
+    "state_path": "design/runs/e01-pre-eco/41-openroad-repairdesignpostgrt/state_out.json",
+    "state_sha256": "a6753be81d8b991a75e486b088298b729f9465e92313f8f20fcf52a46777fe09",
+    "tar_sha256": "2e66e4b22120c75bd443188a269c52fe75d87ba0dd5a477fb6ccb8956bc3c631",
+    "workflow_ref": "Leonardo-DeLeon/ttgf-stepper-motor-controller/.github/workflows/gds.yaml@refs/heads/experiment/stage5-compact"
+  },
+  "continuation": {
+    "eco_target": null,
+    "publication_paths": [
+      ".github/workflows/gds.yaml",
+      "experiments/stage5/continuation.json",
+      "experiments/stage5/directed_sta.tcl",
+      "experiments/stage5/resume.py",
+      "experiments/stage5/resume.sh",
+      "experiments/stage5/verify.py"
+    ],
+    "registered_workflow": ".github/workflows/gds.yaml",
+    "run_tag": "e01-postgrt-reviewed",
+    "start_step": "Odb.DiodesOnPorts"
+  }
+}

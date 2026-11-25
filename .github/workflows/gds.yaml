@@ -1,5 +1,5 @@
-name: E01 compact 160x100
-run-name: E01 continuation from Post-GRT · ${{ github.ref_name }} · ${{ github.sha }}
+name: E01 compact independent signoff
+run-name: E01 final views signoff · ${{ github.sha }}
 on: workflow_dispatch
 
 permissions:
@@ -7,62 +7,128 @@ permissions:
   actions: read
 
 jobs:
-  continue:
+  signoff:
     if: github.ref == 'refs/heads/experiment/stage5-compact' && github.repository == 'Leonardo-DeLeon/ttgf-stepper-motor-controller'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
       PYTHONDONTWRITEBYTECODE: '1'
+      E01_REPORT: ${{ github.workspace }}/e01-signoff-evidence
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 3
+          fetch-depth: 4
           persist-credentials: false
-      - name: Recover the original E01 checkpoint
+
+      - name: Recover authenticated E01 views and historical RTL
+        id: recover
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
+          mkdir -p "$E01_REPORT"
+          set -o pipefail
+          bash experiments/stage5/signoff.sh recover "$RUNNER_TEMP/e01-signoff" 2>&1 | tee "$E01_REPORT/recovery.log"
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11.18'
+
+      - name: Provision KLayout 0.30.14 and its Python API
+        id: klayout
+        if: ${{ !cancelled() && steps.recover.outcome == 'success' }}
+        shell: bash
+        run: |
           set -euo pipefail
-          package=experiments/stage5
-          mkdir e01-resume-report
-          python3 "$package/resume.py" checkout . "$GITHUB_SHA" "$GITHUB_REF" "$GITHUB_REPOSITORY" "$GITHUB_EVENT_NAME" "$GITHUB_WORKFLOW_REF"
-          gh api "repos/$GITHUB_REPOSITORY/actions/runs/45665082920/attempts/1" > e01-resume-report/actions-original-attempt.json
-          gh api "repos/$GITHUB_REPOSITORY/actions/runs/45665082920/artifacts" > e01-resume-report/actions-original-artifacts.json
-          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/15047420988/zip" > "$RUNNER_TEMP/e01-original.zip"
-          python3 "$package/resume.py" recover "$RUNNER_TEMP/e01-original.zip" e01-resume-work . \
-            e01-resume-report/actions-original-attempt.json e01-resume-report/actions-original-artifacts.json
-      - name: Resume Classic and collect extracted timing
-        timeout-minutes: 30
+          python3 -m pip install klayout==0.30.14
+          deb="$RUNNER_TEMP/klayout_0.30.14-1_amd64.deb"
+          curl --fail --location --silent --show-error \
+            https://www.klayout.org/downloads/Ubuntu-24/klayout_0.30.14-1_amd64.deb -o "$deb"
+          md5=$(python3 experiments/stage5/recover_signoff.py field runtime.klayout_package_md5)
+          printf '%s  %s\n' "$md5" "$deb" | md5sum -c -
+          sha256sum "$deb" > "$E01_REPORT/klayout-package.sha256"
+          sudo apt-get update
+          sudo apt-get install -y "$deb"
+
+      - name: Provision fixed GF180D DRC deck
+        id: deck
+        if: ${{ !cancelled() && steps.recover.outcome == 'success' }}
+        uses: TinyTapeout/ciel-action@7ac3e42cf2e1a080f1fc6d7b56d732a2ad17d9f6
+        with:
+          pdk_name: gf180mcuD
+          pdk_root: ${{ runner.temp }}/e01-deck-pdk
+          pdk_version: e8daeda73ca8f5814dbc0b11d1d05802251a3750
+          ciel_version: '3.2.0'
+
+      - name: KLayout DRC geometry, antenna and density
+        if: ${{ !cancelled() && steps.klayout.outcome == 'success' && steps.deck.outcome == 'success' }}
         shell: bash
         run: |
           set -o pipefail
-          bash experiments/stage5/resume.sh e01-resume-work e01-resume-report 2>&1 | tee e01-resume-report/runner.log
-      - name: Seal evidence by run and attempt
-        if: always()
+          bash experiments/stage5/signoff.sh drc "$RUNNER_TEMP/e01-signoff" \
+            "$RUNNER_TEMP/e01-deck-pdk/gf180mcuD" 2>&1 | tee "$E01_REPORT/drc-step.log"
+
+      - name: Convert the authenticated GDSII to OASIS
+        if: ${{ !cancelled() && steps.klayout.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -o pipefail
+          bash experiments/stage5/signoff.sh oasis "$RUNNER_TEMP/e01-signoff" 2>&1 | tee "$E01_REPORT/oasis-step.log"
+
+      - name: Provision fixed GF180D simulation models
+        id: models
+        if: ${{ !cancelled() && steps.recover.outcome == 'success' }}
+        uses: TinyTapeout/ciel-action@7ac3e42cf2e1a080f1fc6d7b56d732a2ad17d9f6
+        with:
+          pdk_name: gf180mcuD
+          pdk_root: ${{ runner.temp }}/e01-implementation-pdk
+          pdk_version: 54435919abffb937387ec956209f9cf5fd2dfbee
+          ciel_version: '3.2.0'
+
+      - name: Provision Icarus 13.0 and cocotb 2.1.0
+        id: simulator
+        if: ${{ !cancelled() && steps.recover.outcome == 'success' }}
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p e01-resume-report e01-continuation-artifact
-          if [[ -f e01-resume-work/checkpoint-replay.json ]]; then
-            cp e01-resume-work/{checkpoint-replay,restored-state}.json e01-resume-report/
-          fi
-          if [[ -d e01-resume-work/payload/design/runs/e01-postgrt-reviewed ]]; then
-            cp -r e01-resume-work/payload/design/runs/e01-postgrt-reviewed e01-resume-report/
-            for item in final-native final-native.log directed-signature.json; do
-              if [[ -e "e01-resume-work/payload/$item" ]]; then
-                cp -r "e01-resume-work/payload/$item" e01-resume-report/
-              fi
-            done
-          fi
-          python3 experiments/stage5/prepare.py seal e01-resume-report
-          tar -C e01-resume-report -czf e01-continuation-artifact/e01-continuation.tar.gz .
-          (cd e01-continuation-artifact && sha256sum e01-continuation.tar.gz > SHA256SUMS)
-          cp e01-resume-report/SHA256SUMS e01-continuation-artifact/payload.sha256
-      - name: Upload continuation evidence
+          deb="$RUNNER_TEMP/iverilog_13.0-1_amd64.deb"
+          curl --fail --location --silent --show-error \
+            https://github.com/TinyTapeout/iverilog/releases/download/v13.0/iverilog_13.0-1_amd64.deb -o "$deb"
+          sha256sum "$deb" > "$E01_REPORT/iverilog-package.sha256"
+          sudo apt-get update
+          sudo apt-get install -y "$deb"
+          python3 -m pip install -r test/requirements.txt
+
+      - name: Functional Gate Level on E01 powered netlist
+        if: ${{ !cancelled() && steps.models.outcome == 'success' && steps.simulator.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -o pipefail
+          bash experiments/stage5/signoff.sh gl "$RUNNER_TEMP/e01-signoff" \
+            "$RUNNER_TEMP/e01-implementation-pdk" 2>&1 | tee "$E01_REPORT/gl-step.log"
+
+      - name: Verify all archived and independent signoff results
+        if: ${{ !cancelled() && steps.recover.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -o pipefail
+          bash experiments/stage5/signoff.sh finalize "$RUNNER_TEMP/e01-signoff" 2>&1 | tee "$E01_REPORT/signoff-step.log"
+
+      - name: Preserve reports for this attempt
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p "$E01_REPORT"
+          root="$RUNNER_TEMP/e01-signoff"
+          for item in "$root"/actions "$root"/signoff "$root"/*.json "$root"/*.SHA256SUMS; do
+            if [[ -e "$item" ]]; then cp -r "$item" "$E01_REPORT/"; fi
+          done
+          python3 experiments/stage5/prepare.py seal "$E01_REPORT"
+
+      - name: Upload reports even when signoff fails
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: e01-continuation-${{ github.run_id }}-${{ github.run_attempt }}
-          path: e01-continuation-artifact/
+          name: e01-signoff-${{ github.run_id }}-${{ github.run_attempt }}
+          path: e01-signoff-evidence/
           if-no-files-found: error

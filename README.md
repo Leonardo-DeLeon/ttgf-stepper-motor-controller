@@ -1,42 +1,13 @@
-![](../../workflows/gds/badge.svg) ![](../../workflows/docs/badge.svg) ![](../../workflows/test/badge.svg) ![](../../workflows/fpga/badge.svg)
+# Programmable Stepper Motor Controller
 
-# Tiny Tapeout Verilog Project Template
+Controlador digital Verilog-2001 para un 28BYJ-48 con ULN2003 externo. Proyecto IEEE Open Silicon Bootcamp 2026, preparado para Tiny Tapeout GF180 TTGF26c. Usa un tile 1×1 y reloj externo de 1 MHz. El mando, la prueba manual y la etapa de potencia están en [docs/info.md](docs/info.md). `info.yaml` define las fuentes, el top y el pinout.
 
-- [Read the documentation for project](docs/info.md)
+## Pruebas y GDS
 
-## What is Tiny Tapeout?
+- **Actions → test** ejecuta las pruebas de interfaz cocotb y los seis bancos Verilog originales. El artifact `test-results` contiene la traza FST, XML y logs de los bancos.
+- **Actions → gds → Run workflow** ejecuta la acción oficial de TTGF26c con `gf180mcuD`. Tras el hardening, se ejecutan el precheck y la simulación a nivel de puertas. `GDS_logs`, `tt_submission`, `gds_render`, `precheck_reports` y `gatelevel_test_results` son los artifacts esperados según qué trabajos terminen. `tt_submission` es el nombre de un artifact local a la corrida de CI.
+- Con Icarus, Python y las dependencias de [test/requirements.txt](test/requirements.txt), ejecutar `cd test && bash run_verilog.sh && make && python -m cocotb_tools.check_results results.xml`.
 
-Tiny Tapeout is an educational project that aims to make it easier and cheaper than ever to get your digital and analog designs manufactured on a real chip.
+La estructura de configuración, workflows y pruebas a nivel de puertas se adaptó de la plantilla GF180. La única variación de configuración de LibreLane es el período nominal de 1000 ns. El workflow GDS se inicia manualmente y usa el PNG entregado como artifact para visualización. [Plantilla oficial](https://github.com/TinyTapeout/ttgf-verilog-template) · [Configuración original](https://github.com/TinyTapeout/ttgf-verilog-template/blob/main/src/config.json) · [Acción TTGF26c](https://github.com/TinyTapeout/tt-gds-action/tree/ttgf26c)
 
-To learn more and get started, visit https://tinytapeout.com.
-
-## Set up your Verilog project
-
-1. Add your Verilog files to the `src` folder.
-2. Edit the [info.yaml](info.yaml) and update information about your project, paying special attention to the `source_files` and `top_module` properties. If you are upgrading an existing Tiny Tapeout project, check out our [online info.yaml migration tool](https://tinytapeout.github.io/tt-yaml-upgrade-tool/).
-3. Edit [docs/info.md](docs/info.md) and add a description of your project.
-4. Adapt the testbench to your design. See [test/README.md](test/README.md) for more information.
-
-The GitHub action will automatically build the ASIC files using [LibreLane](https://www.zerotoasiccourse.com/terminology/librelane/).
-
-## Enable GitHub actions to build the results page
-
-- [Enabling GitHub Pages](https://tinytapeout.com/faq/#my-github-action-is-failing-on-the-pages-part)
-
-## Resources
-
-- [FAQ](https://tinytapeout.com/faq/)
-- [Digital design lessons](https://tinytapeout.com/digital_design/)
-- [Learn how semiconductors work](https://tinytapeout.com/siliwiz/)
-- [Join the community](https://tinytapeout.com/discord)
-- [Build your design locally](https://www.tinytapeout.com/guides/local-hardening/)
-
-## What next?
-
-- [Submit your design to the next shuttle](https://app.tinytapeout.com/).
-- Edit [this README](README.md) and explain your design, how it works, and how to test it.
-- Share your project on your social network of choice:
-  - LinkedIn [#tinytapeout](https://www.linkedin.com/search/results/content/?keywords=%23tinytapeout) [@TinyTapeout](https://www.linkedin.com/company/100708654/)
-  - Mastodon [#tinytapeout](https://chaos.social/tags/tinytapeout) [@matthewvenn](https://chaos.social/@matthewvenn)
-  - X (formerly Twitter) [#tinytapeout](https://twitter.com/hashtag/tinytapeout) [@tinytapeout](https://twitter.com/tinytapeout)
-  - Bluesky [@tinytapeout.com](https://bsky.app/profile/tinytapeout.com)
+[Licencia de los componentes adaptados de la plantilla](LICENSE.template).

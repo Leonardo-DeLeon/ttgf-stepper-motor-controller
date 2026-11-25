@@ -1,80 +1,44 @@
-name: gds
+name: E01 compact 160x100
 
-run-name: GF180 C02a · ${{ github.ref_name }} · ${{ github.sha }}
+run-name: E01 Post-GRT checkpoint · ${{ github.ref_name }} · ${{ github.sha }}
 on: workflow_dispatch
 
 permissions:
   contents: read
 
 jobs:
-  gds:
-    if: github.ref == 'refs/heads/experiment/stage4a-electrical'
+  checkpoint:
+    if: github.ref == 'refs/heads/experiment/stage5-compact' && github.repository == 'Leonardo-DeLeon/ttgf-stepper-motor-controller'
     runs-on: ubuntu-24.04
-    outputs:
-      tools_sha: ${{ steps.preflight.outputs.tools_sha }}
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v6
         with:
-          submodules: recursive
           fetch-depth: 2
           persist-credentials: false
-      - name: Verify variant and pinned Tiny Tapeout tooling
-        id: preflight
+      - name: Run standalone E01 through Post-GRT repair
+        timeout-minutes: 32
         shell: bash
         run: |
-          python3 experiments/stage4a/verify.py inputs
-          tools_sha=$(jq -er '.tools_sha | select(test("^[0-9a-f]{40}$"))' experiments/stage4a/manifest.json)
-          printf 'tools_sha=%s\n' "$tools_sha" >> "$GITHUB_OUTPUT"
-          python3 experiments/stage4a/verify.py identify "$tools_sha" > stage4a-run.json
-          cat stage4a-run.json >> "$GITHUB_STEP_SUMMARY"
-      - name: Build GDS
-        id: build
-        uses: TinyTapeout/tt-gds-action@df73a1e7b52e940423ff55f9354b2b8140d38cb7
-        with:
-          pdk: gf180mcuD
-          librelane-version: '3.0.14'
-          tools-ref: ${{ steps.preflight.outputs.tools_sha }}
-      - name: Check resolved configuration and record physical metrics
-        if: always() && steps.preflight.outcome == 'success'
+          mkdir -p e01-output e01-artifact
+          set -o pipefail
+          bash experiments/stage5/run.sh 2>&1 | tee e01-output/runner.log
+      - name: Seal available logs and views
+        if: always()
         shell: bash
-        env:
-          BUILD_OUTCOME: ${{ steps.build.outcome }}
         run: |
-          actual_tools_sha=$(git -C tt rev-parse HEAD || true)
-          python3 experiments/stage4a/verify.py run "$BUILD_OUTCOME" "$actual_tools_sha"
-      - name: Archive provenance
+          mkdir -p e01-output e01-artifact
+          python3 experiments/stage5/prepare.py seal e01-output
+          tar -C e01-output -czf e01-artifact/e01-output.tar.gz .
+          (cd e01-artifact && sha256sum e01-output.tar.gz > SHA256SUMS)
+          cp e01-output/SHA256SUMS e01-artifact/payload.sha256
+          for name in provenance.json checkpoint.json runner.log; do
+            if [[ -f e01-output/$name ]]; then cp "e01-output/$name" e01-artifact/; fi
+          done
+      - name: Upload evidence by run and attempt
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: stage4a-provenance
-          path: |
-            stage4a-run.json
-            stage4a-physical.json
-            experiments/stage4a/manifest.json
-      - name: Archive available files from a failed build
-        if: failure() && steps.preflight.outcome == 'success'
-        uses: actions/upload-artifact@v7
-        with:
-          name: stage4a-failed-flow
-          path: |
-            src/
-            runs/wokwi/
-
-  precheck:
-    needs: gds
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: TinyTapeout/tt-gds-action/precheck@df73a1e7b52e940423ff55f9354b2b8140d38cb7
-        with:
-          tools-ref: ${{ needs.gds.outputs.tools_sha }}
-
-  gl_test:
-    needs: gds
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-      - uses: TinyTapeout/tt-gds-action/gl_test@df73a1e7b52e940423ff55f9354b2b8140d38cb7
-        with:
-          test-dir: test
+          name: e01-postgrt-${{ github.run_id }}-${{ github.run_attempt }}
+          path: e01-artifact/
+          if-no-files-found: error

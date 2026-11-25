@@ -1,0 +1,144 @@
+{
+  "meta": {
+    "version": 2,
+    "flow": "Classic"
+  },
+  "DESIGN_NAME": "tt_um_ieee_bootcamp_stepper",
+  "VERILOG_FILES": [
+    "dir::rtl/tt_um_ieee_bootcamp_stepper.v",
+    "dir::rtl/clock_enable.v",
+    "dir::rtl/step_counter.v",
+    "dir::rtl/stepper_fsm.v",
+    "dir::rtl/stepper_controller.v"
+  ],
+  "FP_SIZING": "absolute",
+  "DIE_AREA": [
+    0,
+    0,
+    160,
+    100
+  ],
+  "CORE_AREA": [
+    3.36,
+    3.92,
+    156.24,
+    94.08
+  ],
+  "FP_DEF_TEMPLATE": null,
+  "PL_TARGET_DENSITY_PCT": 78,
+  "PL_ROUTABILITY_DRIVEN": true,
+  "GPL_CELL_PADDING": 0,
+  "DPL_CELL_PADDING": 0,
+  "IO_PIN_ORDER_CFG": "dir::pins.cfg",
+  "ERRORS_ON_UNMATCHED_IO": "both",
+  "IO_PIN_H_LAYER": "Metal3",
+  "IO_PIN_V_LAYER": "Metal2",
+  "IO_PIN_H_LENGTH": 2,
+  "IO_PIN_V_LENGTH": 2,
+  "IO_PIN_H_EXTENSION": 0,
+  "IO_PIN_V_EXTENSION": 0,
+  "GRT_ALLOW_CONGESTION": false,
+  "CLOCK_PORT": "clk",
+  "CLOCK_PERIOD": 1000,
+  "VDD_PIN": "VPWR",
+  "GND_PIN": "VGND",
+  "DEFAULT_CORNER": "nom_tt_025C_3v30",
+  "STA_CORNERS": [
+    "nom_tt_025C_3v30",
+    "nom_ss_125C_3v00",
+    "nom_ff_n40C_3v60",
+    "min_tt_025C_3v30",
+    "min_ss_125C_3v00",
+    "min_ff_n40C_3v60",
+    "max_tt_025C_3v30",
+    "max_ss_125C_3v00",
+    "max_ff_n40C_3v60"
+  ],
+  "MAX_TRANSITION_CONSTRAINT": 3,
+  "MAX_CAPACITANCE_CONSTRAINT": 0.2,
+  "MAX_FANOUT_CONSTRAINT": 10,
+  "IO_DELAY_CONSTRAINT": 20,
+  "OUTPUT_CAP_LOAD": 72.91,
+  "CLOCK_UNCERTAINTY_CONSTRAINT": 0.25,
+  "CLOCK_TRANSITION_CONSTRAINT": 0.15,
+  "TIME_DERATING_CONSTRAINT": 5,
+  "SYNTH_DRIVING_CELL": "gf180mcu_fd_sc_mcu7t5v0__inv_1/ZN",
+  "SYNTH_CLK_DRIVING_CELL": "gf180mcu_fd_sc_mcu7t5v0__inv_4/ZN",
+  "SETUP_VIOLATION_CORNERS": [
+    "*"
+  ],
+  "HOLD_VIOLATION_CORNERS": [
+    "*"
+  ],
+  "MAX_SLEW_VIOLATION_CORNERS": [
+    "*"
+  ],
+  "MAX_CAP_VIOLATION_CORNERS": [
+    "*"
+  ],
+  "RUN_LINTER": true,
+  "LINTER_INCLUDE_PDK_MODELS": true,
+  "RUN_KLAYOUT_XOR": false,
+  "RUN_KLAYOUT_DRC": false,
+  "MAGIC_DEF_LABELS": false,
+  "MAGIC_WRITE_LEF_PINONLY": true,
+  "DESIGN_REPAIR_BUFFER_OUTPUT_PORTS": false,
+  "RUN_CTS": true,
+  "CTS_ROOT_BUFFER": "gf180mcu_fd_sc_mcu7t5v0__clkbuf_8",
+  "CTS_CLK_BUFFERS": [
+    "gf180mcu_fd_sc_mcu7t5v0__clkbuf_2",
+    "gf180mcu_fd_sc_mcu7t5v0__clkbuf_4",
+    "gf180mcu_fd_sc_mcu7t5v0__clkbuf_8"
+  ],
+  "CTS_SINK_CLUSTERING_ENABLE": true,
+  "CTS_APPLY_NDR": "half",
+  "PL_RESIZER_HOLD_SLACK_MARGIN": 0.1,
+  "GRT_RESIZER_HOLD_SLACK_MARGIN": 0.05,
+  "RT_MIN_LAYER": "Metal2",
+  "RT_MAX_LAYER": "Metal4",
+  "GRT_LAYER_ADJUSTMENTS": [
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "GRT_ADJUSTMENT": 0.3,
+  "RUN_POST_GRT_DESIGN_REPAIR": true,
+  "GRT_DESIGN_REPAIR_RUN_GRT": true,
+  "GRT_DESIGN_REPAIR_MAX_SLEW_PCT": 10,
+  "GRT_DESIGN_REPAIR_MAX_CAP_PCT": 10,
+  "RUN_TAP_ENDCAP_INSERTION": true,
+  "WELLTAP_CELL": "gf180mcu_fd_sc_mcu7t5v0__filltie",
+  "ENDCAP_CELL": "gf180mcu_fd_sc_mcu7t5v0__endcap",
+  "FP_TAPCELL_DIST": 20,
+  "PDN_ENABLE_RAILS": true,
+  "PDN_RAIL_LAYER": "Metal1",
+  "PDN_RAIL_WIDTH": 0.6,
+  "PDN_MULTILAYER": false,
+  "PDN_CORE_RING": false,
+  "PDN_VERTICAL_LAYER": "Metal4",
+  "PDN_VWIDTH": 1.6,
+  "PDN_VSPACING": 1.7,
+  "PDN_VPITCH": 38.87,
+  "PDN_VOFFSET": 16.32,
+  "PDN_ENABLE_PINS": true,
+  "PDN_EXTEND_TO": "core_ring",
+  "ERROR_ON_PDN_VIOLATIONS": true,
+  "LIB": {
+    "*_tt_025C_3v30": [
+      "pdk_dir::libs.ref/gf180mcu_fd_sc_mcu7t5v0/lib/gf180mcu_fd_sc_mcu7t5v0__tt_025C_3v30.lib"
+    ],
+    "*_ss_125C_3v00": [
+      "pdk_dir::libs.ref/gf180mcu_fd_sc_mcu7t5v0/lib/gf180mcu_fd_sc_mcu7t5v0__ss_125C_3v00.lib"
+    ],
+    "*_ff_n40C_3v60": [
+      "pdk_dir::libs.ref/gf180mcu_fd_sc_mcu7t5v0/lib/gf180mcu_fd_sc_mcu7t5v0__ff_n40C_3v60.lib"
+    ]
+  },
+  "RCX_RULESETS": {
+    "nom_*": "pdk_dir::libs.tech/openlane/rules.openrcx.gf180mcuD.nom",
+    "min_*": "pdk_dir::libs.tech/openlane/rules.openrcx.gf180mcuD.min",
+    "max_*": "pdk_dir::libs.tech/openlane/rules.openrcx.gf180mcuD.max"
+  }
+}

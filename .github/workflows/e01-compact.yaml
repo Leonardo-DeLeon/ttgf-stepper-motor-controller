@@ -1,0 +1,44 @@
+name: E01 compact 160x100
+
+run-name: E01 Post-GRT checkpoint · ${{ github.ref_name }} · ${{ github.sha }}
+on: workflow_dispatch
+
+permissions:
+  contents: read
+
+jobs:
+  checkpoint:
+    if: github.ref == 'refs/heads/experiment/stage5-compact' && github.repository == 'Leonardo-DeLeon/ttgf-stepper-motor-controller'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Run standalone E01 through Post-GRT repair
+        timeout-minutes: 32
+        shell: bash
+        run: |
+          mkdir -p e01-output e01-artifact
+          set -o pipefail
+          bash experiments/stage5/run.sh 2>&1 | tee e01-output/runner.log
+      - name: Seal available logs and views
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p e01-output e01-artifact
+          python3 experiments/stage5/prepare.py seal e01-output
+          tar -C e01-output -czf e01-artifact/e01-output.tar.gz .
+          (cd e01-artifact && sha256sum e01-output.tar.gz > SHA256SUMS)
+          cp e01-output/SHA256SUMS e01-artifact/payload.sha256
+          for name in provenance.json checkpoint.json runner.log; do
+            if [[ -f e01-output/$name ]]; then cp "e01-output/$name" e01-artifact/; fi
+          done
+      - name: Upload evidence by run and attempt
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e01-postgrt-${{ github.run_id }}-${{ github.run_attempt }}
+          path: e01-artifact/
+          if-no-files-found: error

@@ -1,0 +1,374 @@
+{
+  "base_commit": "100c46eacdc841dafa87b707363bcc5e6a10bff8",
+  "baseline_archive_sha256": "c7b116e9e43b1a1b517d180247b63402907759568e22e08211abc6493a4f2633",
+  "baseline_gds_run": "45643418859",
+  "baseline_inputs": {
+    "src/clock_enable.v": "7678cf52e4637f935703f54e0437291730eb4bd1b60ea3ba2cf674641aed272e",
+    "src/config.json": "6b90fa929d752d3d3b5884037a4884717a617f69d202135690d36305aaf99a9e",
+    "src/step_counter.v": "3078cf986384c830b5c3cf1c6dfcc2d2e22653dfb6768be8d683e2c5c792521b",
+    "src/stepper_controller.v": "fa5e9e8b1c27bcfca2990b59515c5ebf2912a58ab5e23a2af07c9fa196ed430d",
+    "src/stepper_fsm.v": "4d348853ae160a34f21445152d2422dd79a1f1f8de28cfc4e401e8745f5f8fca",
+    "src/tt_um_ieee_bootcamp_stepper.v": "9738aaa8a3a86bdc6ca2eed1621643ecfb134c1ae76f49e1497b1692d6b0dc1b",
+    "test/Makefile": "85f8cef357928c10652fc012501f187d612ad032d5644f4b8847e810be4819ea",
+    "test/requirements.txt": "1797c95c76d1b01f238593784a92bbce62cd61a787e7113a4c41eb9c763ad381",
+    "test/run_verilog.sh": "c866f75467f86e74f570f43af12f347d462bc535274da10999fe218f6702179b",
+    "test/summarize_sim.py": "5ec1b3f1531adec9b79e1b853b8f0ae49341dc8e9dfeb060b82b7090c4d03f0b",
+    "test/tb.v": "f0d44f4d69376fda9b98d1c222dc053dcc25ba36385fc4b5cbb2738a93f4c074",
+    "test/test_stepper.py": "083313f4060c17cffd5a1c2dbac412e457144e405efb957e206ac599d1709d10",
+    "test/verilog/tb_clock_enable.v": "8027c7ceff96ef9ba66a2175e1935b54ae258949ab7d56f3e8a3ccde1a7ae15b",
+    "test/verilog/tb_step_counter.v": "d2cfab3ec1f3e5f87ed52f5e65450eef0a77d25055058d0f21bfeb4b879ee70a",
+    "test/verilog/tb_stepper_controller.v": "c93ef57e975191f3c1518942611b126a6748fb10ea9557d44378444d7a7a16b0",
+    "test/verilog/tb_stepper_demo.v": "955b2327926905dfd2a46db9135d5451b4e7454d8024fe3249c83adf7a4ac14b",
+    "test/verilog/tb_stepper_fsm.v": "347aa5f46784c930016fdec2590e76e66fd34423f5a874f7b776bd26bafe2457",
+    "test/verilog/tb_tiny_tapeout.v": "fd66463670cd59c2a20279b3139554d03dad464b4e9f9f7da8488759d5fc4bb2"
+  },
+  "baseline_rtl_run": "45642898161",
+  "configuration_hashes": {
+    "config.json": "46372429b3472491eccc0448e28523ec69aa66a1e60c4f5917d9d703fe8ba4f8",
+    "pins.cfg": "08588bba6300d908d8d057e7ef1a445f07e256d8b7b9b3b223fdfb62145310de"
+  },
+  "cts_root": "gf180mcu_fd_sc_mcu7t5v0__clkbuf_8",
+  "eco_buffer": "gf180mcu_fd_sc_mcu7t5v0__buf_1",
+  "eco_reference_signature": {
+    "function": "nor2",
+    "inputs": {
+      "A1": [
+        "nand2",
+        "ZN",
+        {
+          "A1": [
+            "ff",
+            [
+              "controller.run_sync"
+            ],
+            "Q"
+          ],
+          "A2": [
+            "clkinv",
+            "ZN",
+            {
+              "I": [
+                "nor2",
+                "ZN",
+                {
+                  "A1": [
+                    "ff",
+                    [
+                      "controller.state[2]"
+                    ],
+                    "Q"
+                  ],
+                  "A2": [
+                    "ff",
+                    [
+                      "controller.state[4]"
+                    ],
+                    "Q"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "A2": [
+        "or2",
+        "Z",
+        {
+          "A1": [
+            "and2",
+            "Z",
+            {
+              "A1": [
+                "ff",
+                [
+                  "controller.state[3]"
+                ],
+                "Q"
+              ],
+              "A2": [
+                "ff",
+                [
+                  "controller.run_sync"
+                ],
+                "Q"
+              ]
+            }
+          ],
+          "A2": [
+            "and4",
+            "Z",
+            {
+              "A1": [
+                "ff",
+                [
+                  "controller.phases.reset_n"
+                ],
+                "Q"
+              ],
+              "A2": [
+                "clkinv",
+                "ZN",
+                {
+                  "I": [
+                    "ff",
+                    [
+                      "controller.timer.remaining[13]"
+                    ],
+                    "Q"
+                  ]
+                }
+              ],
+              "A3": [
+                "nor4",
+                "ZN",
+                {
+                  "A1": [
+                    "ff",
+                    [
+                      "controller.timer.remaining[7]"
+                    ],
+                    "Q"
+                  ],
+                  "A2": [
+                    "ff",
+                    [
+                      "controller.timer.remaining[12]"
+                    ],
+                    "Q"
+                  ],
+                  "A3": [
+                    "or4",
+                    "Z",
+                    {
+                      "A1": [
+                        "ff",
+                        [
+                          "controller.timer.remaining[4]"
+                        ],
+                        "Q"
+                      ],
+                      "A2": [
+                        "ff",
+                        [
+                          "controller.timer.remaining[5]"
+                        ],
+                        "Q"
+                      ],
+                      "A3": [
+                        "ff",
+                        [
+                          "controller.timer.remaining[6]"
+                        ],
+                        "Q"
+                      ],
+                      "A4": [
+                        "or4",
+                        "Z",
+                        {
+                          "A1": [
+                            "ff",
+                            [
+                              "controller.timer.remaining[0]"
+                            ],
+                            "Q"
+                          ],
+                          "A2": [
+                            "ff",
+                            [
+                              "controller.timer.remaining[1]"
+                            ],
+                            "Q"
+                          ],
+                          "A3": [
+                            "ff",
+                            [
+                              "controller.timer.remaining[2]"
+                            ],
+                            "Q"
+                          ],
+                          "A4": [
+                            "ff",
+                            [
+                              "controller.timer.remaining[3]"
+                            ],
+                            "Q"
+                          ]
+                        }
+                      ]
+                    }
+                  ],
+                  "A4": [
+                    "clkinv",
+                    "ZN",
+                    {
+                      "I": [
+                        "nor4",
+                        "ZN",
+                        {
+                          "A1": [
+                            "ff",
+                            [
+                              "controller.timer.remaining[8]"
+                            ],
+                            "Q"
+                          ],
+                          "A2": [
+                            "ff",
+                            [
+                              "controller.timer.remaining[9]"
+                            ],
+                            "Q"
+                          ],
+                          "A3": [
+                            "ff",
+                            [
+                              "controller.timer.remaining[10]"
+                            ],
+                            "Q"
+                          ],
+                          "A4": [
+                            "ff",
+                            [
+                              "controller.timer.remaining[11]"
+                            ],
+                            "Q"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "A4": [
+                "nor2",
+                "ZN",
+                {
+                  "A1": [
+                    "ff",
+                    [
+                      "controller.state[3]"
+                    ],
+                    "Q"
+                  ],
+                  "A2": [
+                    "nand2",
+                    "ZN",
+                    {
+                      "A1": [
+                        "ff",
+                        [
+                          "controller.run_sync"
+                        ],
+                        "Q"
+                      ],
+                      "A2": [
+                        "clkinv",
+                        "ZN",
+                        {
+                          "I": [
+                            "nor2",
+                            "ZN",
+                            {
+                              "A1": [
+                                "ff",
+                                [
+                                  "controller.state[2]"
+                                ],
+                                "Q"
+                              ],
+                              "A2": [
+                                "ff",
+                                [
+                                  "controller.state[4]"
+                                ],
+                                "Q"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "receivers": [
+      {
+        "endpoints": [
+          [
+            "ff",
+            "controller.timer.remaining[6]",
+            "D"
+          ]
+        ],
+        "function": "aoi22",
+        "pin": "B1"
+      },
+      {
+        "endpoints": [
+          [
+            "ff",
+            "controller.timer.remaining[4]",
+            "D"
+          ]
+        ],
+        "function": "aoi22",
+        "pin": "B2"
+      },
+      {
+        "endpoints": [
+          [
+            "ff",
+            "controller.timer.remaining[13]",
+            "D"
+          ]
+        ],
+        "function": "nand2",
+        "pin": "A1"
+      },
+      {
+        "endpoints": [
+          [
+            "ff",
+            "controller.timer.remaining[11]",
+            "D"
+          ]
+        ],
+        "function": "nand3",
+        "pin": "A3"
+      }
+    ]
+  },
+  "image": "ghcr.io/librelane/librelane@sha256:f91b21d75f79871f9ccf37451020b5d2f7b3236881a997ff709c561e8280a30f",
+  "klayout_deck_revision": "e8daeda73ca8f5814dbc0b11d1d05802251a3750",
+  "librelane": "3.0.14",
+  "openroad_rcx": "dcf36133a369abc8f3c5e5738cd4d82e4903c0e0",
+  "opensta": "2.7.0",
+  "opensta_source": "857316ff001b2a8dbbdc5996944d08a6d38c87ab",
+  "pdk": "gf180mcuD",
+  "pdk_revision": "54435919abffb937387ec956209f9cf5fd2dfbee",
+  "publication_paths": [
+    ".github/workflows/e01-compact.yaml",
+    "experiments/stage5/config.json",
+    "experiments/stage5/eco_signature.py",
+    "experiments/stage5/inspect.tcl",
+    "experiments/stage5/klayout_signoff.sh",
+    "experiments/stage5/manifest.json",
+    "experiments/stage5/pins.cfg",
+    "experiments/stage5/prepare.py",
+    "experiments/stage5/run.sh",
+    "experiments/stage5/signoff.py",
+    "experiments/stage5/verify.py"
+  ],
+  "ref": "refs/heads/experiment/stage5-compact",
+  "repository": "Leonardo-DeLeon/ttgf-stepper-motor-controller",
+  "scl": "gf180mcu_fd_sc_mcu7t5v0",
+  "sdc_command_sha256": "b4a140837a391fb7c42087a5f0b25456c38fea5d5c4bd8304881dca8cb5de61d",
+  "tt_support_tools": "7d2d2ef5261eb1df16d0bc342834d48a8a276881",
+  "variant": "e01-compact-160x100"
+}

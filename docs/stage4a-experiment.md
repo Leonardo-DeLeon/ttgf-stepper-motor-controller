@@ -1,11 +1,7 @@
-# GF180 Stage 4A · Post-global-routing design repair
+# GF180 Stage 4A · Independent clock-tree root experiment
 
-`a01-postgrt` uses the RTL and tests from V1.0, commit `96ff2025df99f416a7e48a39f40d3ddc8ced6c3b`, with the official TTGF26c 1×1 floorplan, GF180D and LibreLane 3.0.14. The clock period is 1000 ns. The reference for measurement is Actions run `45544273443`.
+`b01-cts-root8` compares against the physical configuration of V1.0 at commit `96ff2025df99f416a7e48a39f40d3ddc8ced6c3b`, Actions run `45544273443`. It uses the same RTL, tests, 1000 ns period, GF180D, Liberty and official 1×1 tile. The physical change sets `CTS_ROOT_BUFFER=gf180mcu_fd_sc_mcu7t5v0__clkbuf_8`. Post-GRT design repair uses the V1.0 setting of false. Strict setup, hold, slew and capacitance checks cover nine corners with 3 ns, 0.200 pF and fanout 10.
 
-`RUN_POST_GRT_DESIGN_REPAIR=true` enables OpenROAD design repair using global-routing estimates before final extraction. Setup, hold, slew and capacitance checks apply to all nine STA corners. The limits remain 3 ns, 0.200 pF and fanout 10.
+Start **Actions → gds → Run workflow** on `experiment/stage4a-electrical`. Use the commit and run ID in `stage4a-provenance` to match the outputs. The verifier requires the routed netlist to show the selected root master and 61 clocked flip-flops. It lists the actual branch and dummy masters. The archived STA and SPEF reports are needed to quantify effective loading, clock slew, latency and skew. The branch footprint and number of loads determine the output capacitance the root sees. A smaller root alone can increase transition time.
 
-The GDS workflow is manual. Select the `experiment/stage4a-electrical` ref in **Actions → gds → Run workflow**. Match the run's commit and ID with `stage4a-provenance`. On failure, `stage4a-failed-flow` preserves available inputs and reports. Precheck and Gate Level run after a successful GDS job.
-
-Compare the physical result with V1.0 across SPEF corners and inspect the repair and CTS reports. V1.0 measured 4.178255 ns slew, 204.701 fF in the clock root, +790.325111 ns minimum setup, +0.160541 ns minimum hold, and 10 523.7888 µm² of routed functional and auxiliary cells. Variant results are pending. The experiment targets data-net slew. Clock-root capacitance is measured independently.
-
-[Reference workflow run](https://github.com/Leonardo-DeLeon/ttgf-stepper-motor-controller/actions/runs/45544273443)
+V1.0 had one `clkbuf_16` root, eight `clkbuf_16` branches, seven dummy loads and 204.701 fF at the worst corner. B01 results are pending. A01 remains an independent result in commit `8e0d233bd01e48f4ff688ef5451f53dc9cab3958`. Failed runs preserve available evidence in `stage4a-failed-flow`.

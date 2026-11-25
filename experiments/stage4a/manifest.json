@@ -1,9 +1,8 @@
 {
-  "variant": "a01-postgrt",
+  "variant": "b01-cts-root8",
   "reference_commit": "96ff2025df99f416a7e48a39f40d3ddc8ced6c3b",
   "reference_run": 45544273443,
   "action": "TinyTapeout/tt-gds-action@ttgf26c",
-  "tools_sha_prefix": "7d2d2ef5",
   "pdk": {
     "FLOW_NAME": "LibreLane",
     "FLOW_VERSION": "3.0.14",
@@ -14,7 +13,7 @@
   "openroad_rcx_sha": "dcf36133a369abc8f3c5e5738cd4d82e4903c0e0",
   "def_template_suffix": "/tt/tech/gf180mcuD/def/tt_block_1x1_pgvdd.def",
   "input_sha256": {
-    "src/config.json": "2e663f82ed82840fc1ef6e4b1995212745e266ddfd5ddb15159e45b21ec46f6e",
+    "src/config.json": "4d5c5ffd4f98525ffbe541b15c73fa2d59bba1cd57142d026228c74ca06dc7e8",
     ".github/workflows/test.yaml": "2d8ac99cfe13bd2ad05efa7e78ab5c31fde10f1f0991c95b9a4d2584ca120761",
     "info.yaml": "3d8ebdfeb77d4ada7b78338558f8a9a0be0adc8efb62f32df22377211008e853",
     "src/clock_enable.v": "7678cf52e4637f935703f54e0437291730eb4bd1b60ea3ba2cf674641aed272e",
@@ -48,7 +47,7 @@
     "MAX_CAP_VIOLATION_CORNERS": [
       "*"
     ],
-    "RUN_POST_GRT_DESIGN_REPAIR": true
+    "CTS_ROOT_BUFFER": "gf180mcu_fd_sc_mcu7t5v0__clkbuf_8"
   },
   "expected_resolved": {
     "CLOCK_PERIOD": 1000,
@@ -99,7 +98,7 @@
     "ERROR_ON_TR_DRC": true,
     "ERROR_ON_DISCONNECTED_PINS": true,
     "RUN_ANTENNA_REPAIR": true,
-    "CTS_ROOT_BUFFER": "gf180mcu_fd_sc_mcu7t5v0__clkbuf_16",
+    "CTS_ROOT_BUFFER": "gf180mcu_fd_sc_mcu7t5v0__clkbuf_8",
     "CTS_CLK_BUFFERS": [
       "gf180mcu_fd_sc_mcu7t5v0__clkbuf_2",
       "gf180mcu_fd_sc_mcu7t5v0__clkbuf_4",
@@ -128,7 +127,7 @@
     "MAX_CAP_VIOLATION_CORNERS": [
       "*"
     ],
-    "RUN_POST_GRT_DESIGN_REPAIR": true,
+    "RUN_POST_GRT_DESIGN_REPAIR": false,
     "SIGNOFF_SDC_FILE": null,
     "PNR_SDC_FILE": null,
     "RCX_SDC_FILE": null,
@@ -136,5 +135,6 @@
     "PL_RESIZER_HOLD_SLACK_MARGIN": 0.1,
     "GRT_RESIZER_HOLD_SLACK_MARGIN": 0.05,
     "CTS_APPLY_NDR": "half"
-  }
+  },
+  "tools_sha": "7d2d2ef5261eb1df16d0bc342834d48a8a276881"
 }

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Verify Stage 4A inputs and collect signoff metadata from LibreLane 3.0.14."""
 import argparse
+from collections import defaultdict
 from hashlib import sha256
 import json
 import os
@@ -35,8 +36,7 @@ def verify_inputs(manifest):
 
 
 def identify(manifest, tools_sha):
-    if not re.fullmatch(manifest["tools_sha_prefix"] + r"[0-9a-f]{32}", tools_sha):
-        raise ValueError("Unexpected tt-support-tools revision")
+    match("tt-support-tools revision", tools_sha, manifest["tools_sha"])
     return {
         "variant": manifest["variant"],
         "reference_commit": manifest["reference_commit"],
@@ -75,12 +75,53 @@ def verify_toolchain(manifest, outcome):
     merged = read(ROOT / "src/config_merged.json")
     for key, value in manifest["config_changes"].items():
         match("merged " + key, merged[key], value)
-    if not resolved["RUN_POST_GRT_DESIGN_REPAIR"]:
-        return None
-    repair = single_step("openroad-repairdesignpostgrt")
-    if not (repair / "state_out.json").is_file():
-        raise ValueError("Post-global-routing design repair did not complete")
-    return repair.name
+    if list(RUN.glob("*-openroad-repairdesignpostgrt")):
+        raise ValueError("B01 unexpectedly ran post-GRT design repair")
+
+
+def routed_view(path):
+    artifact = Path(path)
+    return RUN / artifact.parent.name / artifact.name
+
+
+def clock_topology(netlist):
+    """Trace actual clocks from the top clock port through the routed netlist."""
+    loads = defaultdict(list)
+    inst_re = r"^\s*(gf180mcu_fd_sc_mcu7t5v0__\w+)\s+(\S+)\s*\((.*?)\);"
+    terminal_re = r"\.(\w+)\s*\(\s*(.*?)\s*\)"
+    for master, instance, body in re.findall(inst_re, netlist.read_text(encoding="utf-8"), re.M | re.S):
+        terminals = dict(re.findall(terminal_re, body, re.S))
+        out = terminals.get("Z") or terminals.get("ZN")
+        for pin in ("I", "CLK"):
+            if terminals.get(pin):
+                loads[terminals[pin]].append((instance, master, pin, out))
+    roots = loads["clk"]
+    match("number of loads on the input clock", len(roots), 1)
+    root, master, pin, out = roots[0]
+    if pin != "I" or not out:
+        raise ValueError("Clock input is not attached to a driving buffer")
+    tree, pending, visited, all_ffs = [], [(out, root, master, 1)], set(), set()
+    while pending:
+        net, driver, cell, depth = pending.pop(0)
+        if net in visited or not loads[net]:
+            raise ValueError(f"Unexpected or undriven clock subtree at {net}")
+        visited.add(net)
+        branches, flip_flops, dummy = [], [], []
+        for instance, receiver_master, pin, out in loads[net]:
+            receiver = {"instance": instance, "master": receiver_master, "pin": pin}
+            if pin == "CLK":
+                flip_flops.append(receiver)
+                all_ffs.add(instance)
+            elif out:
+                branches.append(receiver)
+                pending.append((out, instance, receiver_master, depth + 1))
+            else:
+                dummy.append(receiver)
+        tree.append({"net": net, "driver": driver, "master": cell, "depth": depth,
+                     "direct_loads": len(loads[net]), "branches": branches,
+                     "flip_flops": flip_flops, "dummy_loads": dummy})
+    match("unique CTS flip-flops", len(all_ffs), 61)
+    return tree
 
 
 def worst_violators(report):
@@ -103,8 +144,7 @@ def worst_violators(report):
 def collected_metrics(manifest, outcome):
     sta = single_step("openroad-stapostpnr")
     state = read(sta / "state_out.json")
-    sdc_path = Path(state["sdc"])
-    sdc = (RUN / sdc_path.parent.name / sdc_path.name).read_text(encoding="utf-8")
+    sdc = routed_view(state["sdc"]).read_text(encoding="utf-8")
     expected = manifest["expected_resolved"]
     sdc_checks = {
         r"^create_clock\b[^\n]* -period\s+([\d.]+)": expected["CLOCK_PERIOD"],
@@ -156,6 +196,7 @@ def collected_metrics(manifest, outcome):
         "antenna_nets": physical_metrics.get("antenna__violating__nets"),
         "antenna_pins": physical_metrics.get("antenna__violating__pins"),
         "cts_summary": cts.read_text(encoding="utf-8"),
+        "clock_tree": clock_topology(routed_view(state["nl"])),
         "corners": counts,
     }
 
@@ -163,9 +204,11 @@ def collected_metrics(manifest, outcome):
 def verify_run(manifest, outcome):
     verify_inputs(manifest)
     result = {"variant": manifest["variant"], "official_build_outcome": outcome}
-    result["postgrt_step"] = verify_toolchain(manifest, outcome)
+    verify_toolchain(manifest, outcome)
     result.update(collected_metrics(manifest, outcome))
     (ROOT / "stage4a-physical.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    match("routed clock root master", result["clock_tree"][0]["master"],
+          manifest["expected_resolved"]["CTS_ROOT_BUFFER"])
     for corner, row in result["corners"].items():
         print(corner, json.dumps(row))
     if any(row[key] for row in result["corners"].values() for key in COUNT_METRICS):

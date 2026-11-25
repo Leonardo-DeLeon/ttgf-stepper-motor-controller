@@ -1,0 +1,140 @@
+{
+  "variant": "a01-postgrt",
+  "reference_commit": "96ff2025df99f416a7e48a39f40d3ddc8ced6c3b",
+  "reference_run": 45544273443,
+  "action": "TinyTapeout/tt-gds-action@ttgf26c",
+  "tools_sha_prefix": "7d2d2ef5",
+  "pdk": {
+    "FLOW_NAME": "LibreLane",
+    "FLOW_VERSION": "3.0.14",
+    "PDK": "gf180mcuD",
+    "PDK_SOURCE": "open_pdks",
+    "PDK_VERSION": "54435919abffb937387ec956209f9cf5fd2dfbee"
+  },
+  "openroad_rcx_sha": "dcf36133a369abc8f3c5e5738cd4d82e4903c0e0",
+  "def_template_suffix": "/tt/tech/gf180mcuD/def/tt_block_1x1_pgvdd.def",
+  "input_sha256": {
+    "src/config.json": "2e663f82ed82840fc1ef6e4b1995212745e266ddfd5ddb15159e45b21ec46f6e",
+    ".github/workflows/test.yaml": "2d8ac99cfe13bd2ad05efa7e78ab5c31fde10f1f0991c95b9a4d2584ca120761",
+    "info.yaml": "3d8ebdfeb77d4ada7b78338558f8a9a0be0adc8efb62f32df22377211008e853",
+    "src/clock_enable.v": "7678cf52e4637f935703f54e0437291730eb4bd1b60ea3ba2cf674641aed272e",
+    "src/step_counter.v": "3078cf986384c830b5c3cf1c6dfcc2d2e22653dfb6768be8d683e2c5c792521b",
+    "src/stepper_controller.v": "fa5e9e8b1c27bcfca2990b59515c5ebf2912a58ab5e23a2af07c9fa196ed430d",
+    "src/stepper_fsm.v": "4d348853ae160a34f21445152d2422dd79a1f1f8de28cfc4e401e8745f5f8fca",
+    "src/tt_um_ieee_bootcamp_stepper.v": "9738aaa8a3a86bdc6ca2eed1621643ecfb134c1ae76f49e1497b1692d6b0dc1b",
+    "test/Makefile": "85f8cef357928c10652fc012501f187d612ad032d5644f4b8847e810be4819ea",
+    "test/requirements.txt": "1797c95c76d1b01f238593784a92bbce62cd61a787e7113a4c41eb9c763ad381",
+    "test/run_verilog.sh": "c866f75467f86e74f570f43af12f347d462bc535274da10999fe218f6702179b",
+    "test/summarize_sim.py": "5ec1b3f1531adec9b79e1b853b8f0ae49341dc8e9dfeb060b82b7090c4d03f0b",
+    "test/tb.v": "f0d44f4d69376fda9b98d1c222dc053dcc25ba36385fc4b5cbb2738a93f4c074",
+    "test/test_stepper.py": "083313f4060c17cffd5a1c2dbac412e457144e405efb957e206ac599d1709d10",
+    "test/verilog/tb_clock_enable.v": "8027c7ceff96ef9ba66a2175e1935b54ae258949ab7d56f3e8a3ccde1a7ae15b",
+    "test/verilog/tb_step_counter.v": "d2cfab3ec1f3e5f87ed52f5e65450eef0a77d25055058d0f21bfeb4b879ee70a",
+    "test/verilog/tb_stepper_controller.v": "c93ef57e975191f3c1518942611b126a6748fb10ea9557d44378444d7a7a16b0",
+    "test/verilog/tb_stepper_demo.v": "955b2327926905dfd2a46db9135d5451b4e7454d8024fe3249c83adf7a4ac14b",
+    "test/verilog/tb_stepper_fsm.v": "347aa5f46784c930016fdec2590e76e66fd34423f5a874f7b776bd26bafe2457",
+    "test/verilog/tb_tiny_tapeout.v": "fd66463670cd59c2a20279b3139554d03dad464b4e9f9f7da8488759d5fc4bb2"
+  },
+  "config_changes": {
+    "SETUP_VIOLATION_CORNERS": [
+      "*"
+    ],
+    "HOLD_VIOLATION_CORNERS": [
+      "*"
+    ],
+    "MAX_SLEW_VIOLATION_CORNERS": [
+      "*"
+    ],
+    "MAX_CAP_VIOLATION_CORNERS": [
+      "*"
+    ],
+    "RUN_POST_GRT_DESIGN_REPAIR": true
+  },
+  "expected_resolved": {
+    "CLOCK_PERIOD": 1000,
+    "CLOCK_PORT": "clk",
+    "DESIGN_NAME": "tt_um_ieee_bootcamp_stepper",
+    "DIE_AREA": [
+      0,
+      0,
+      346.64,
+      160.72
+    ],
+    "CORE_AREA": null,
+    "FP_SIZING": "absolute",
+    "VDD_PIN": "VPWR",
+    "GND_PIN": "VGND",
+    "PDN_VPITCH": 38.87,
+    "PDN_MULTILAYER": false,
+    "RT_MAX_LAYER": "Metal4",
+    "MAX_TRANSITION_CONSTRAINT": 3,
+    "MAX_CAPACITANCE_CONSTRAINT": 0.2,
+    "MAX_FANOUT_CONSTRAINT": 10,
+    "IO_DELAY_CONSTRAINT": 20,
+    "OUTPUT_CAP_LOAD": 72.91,
+    "CLOCK_UNCERTAINTY_CONSTRAINT": 0.25,
+    "CLOCK_TRANSITION_CONSTRAINT": 0.15,
+    "TIME_DERATING_CONSTRAINT": 5,
+    "SYNTH_DRIVING_CELL": "gf180mcu_fd_sc_mcu7t5v0__inv_1/ZN",
+    "SYNTH_CLK_DRIVING_CELL": "gf180mcu_fd_sc_mcu7t5v0__inv_4/ZN",
+    "STD_CELL_LIBRARY": "gf180mcu_fd_sc_mcu7t5v0",
+    "PDK": "gf180mcuD",
+    "STA_CORNERS": [
+      "nom_tt_025C_3v30",
+      "nom_ss_125C_3v00",
+      "nom_ff_n40C_3v60",
+      "min_tt_025C_3v30",
+      "min_ss_125C_3v00",
+      "min_ff_n40C_3v60",
+      "max_tt_025C_3v30",
+      "max_ss_125C_3v00",
+      "max_ff_n40C_3v60"
+    ],
+    "DEFAULT_CORNER": "nom_tt_025C_3v30",
+    "RUN_CTS": true,
+    "RUN_MAGIC_DRC": true,
+    "RUN_LVS": true,
+    "ERROR_ON_MAGIC_DRC": true,
+    "ERROR_ON_LVS_ERROR": true,
+    "ERROR_ON_TR_DRC": true,
+    "ERROR_ON_DISCONNECTED_PINS": true,
+    "RUN_ANTENNA_REPAIR": true,
+    "CTS_ROOT_BUFFER": "gf180mcu_fd_sc_mcu7t5v0__clkbuf_16",
+    "CTS_CLK_BUFFERS": [
+      "gf180mcu_fd_sc_mcu7t5v0__clkbuf_2",
+      "gf180mcu_fd_sc_mcu7t5v0__clkbuf_4",
+      "gf180mcu_fd_sc_mcu7t5v0__clkbuf_8"
+    ],
+    "CTS_CORNERS": null,
+    "PNR_CORNERS": null,
+    "RSZ_CORNERS": null,
+    "DESIGN_REPAIR_MAX_SLEW_PCT": 20,
+    "GRT_DESIGN_REPAIR_MAX_SLEW_PCT": 10,
+    "GRT_DESIGN_REPAIR_MAX_CAP_PCT": 10,
+    "GRT_DESIGN_REPAIR_RUN_GRT": true,
+    "RUN_KLAYOUT_DRC": false,
+    "RUN_DRT": true,
+    "RUN_LINTER": true,
+    "ERROR_ON_PDN_VIOLATIONS": true,
+    "SETUP_VIOLATION_CORNERS": [
+      "*"
+    ],
+    "HOLD_VIOLATION_CORNERS": [
+      "*"
+    ],
+    "MAX_SLEW_VIOLATION_CORNERS": [
+      "*"
+    ],
+    "MAX_CAP_VIOLATION_CORNERS": [
+      "*"
+    ],
+    "RUN_POST_GRT_DESIGN_REPAIR": true,
+    "SIGNOFF_SDC_FILE": null,
+    "PNR_SDC_FILE": null,
+    "RCX_SDC_FILE": null,
+    "STA_EXTRA_CORNER_TCL_FILE": null,
+    "PL_RESIZER_HOLD_SLACK_MARGIN": 0.1,
+    "GRT_RESIZER_HOLD_SLACK_MARGIN": 0.05,
+    "CTS_APPLY_NDR": "half"
+  }
+}

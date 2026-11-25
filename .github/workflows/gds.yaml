@@ -1,5 +1,6 @@
 name: gds
 
+run-name: GF180 experimental · ${{ github.ref_name }} · ${{ github.sha }}
 on: workflow_dispatch
 
 permissions:
@@ -7,27 +8,77 @@ permissions:
 
 jobs:
   gds:
+    if: github.ref == 'refs/heads/experiment/stage4a-electrical'
     runs-on: ubuntu-24.04
+    outputs:
+      tools_sha: ${{ steps.preflight.outputs.tools_sha }}
     steps:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
+          persist-credentials: false
+      - name: Verify variant and resolve Tiny Tapeout tooling
+        id: preflight
+        shell: bash
+        run: |
+          python3 experiments/stage4a/verify.py inputs
+          prefix=$(jq -er '.tools_sha_prefix' experiments/stage4a/manifest.json)
+          [[ "$prefix" =~ ^[0-9a-f]{8}$ ]]
+          tools_sha=$(curl --fail --silent --show-error --retry 3 --max-time 30 \
+            "https://api.github.com/repos/TinyTapeout/tt-support-tools/commits/$prefix" |
+            jq -er '.sha | select(test("^[0-9a-f]{40}$"))')
+          [[ "$tools_sha" == "$prefix"* ]]
+          printf 'tools_sha=%s\n' "$tools_sha" >> "$GITHUB_OUTPUT"
+          python3 experiments/stage4a/verify.py identify "$tools_sha" > stage4a-run.json
+          cat stage4a-run.json >> "$GITHUB_STEP_SUMMARY"
       - name: Build GDS
+        id: build
         uses: TinyTapeout/tt-gds-action@ttgf26c
         with:
           pdk: gf180mcuD
+          librelane-version: '3.0.14'
+          tools-ref: ${{ steps.preflight.outputs.tools_sha }}
+      - name: Check resolved configuration and record physical metrics
+        if: always() && steps.preflight.outcome == 'success'
+        env:
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+          TOOLS_SHA: ${{ steps.preflight.outputs.tools_sha }}
+        run: |
+          test "$(git -C tt rev-parse HEAD)" = "$TOOLS_SHA"
+          python3 experiments/stage4a/verify.py run "$BUILD_OUTCOME"
+      - name: Archive provenance
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: stage4a-provenance
+          path: |
+            stage4a-run.json
+            stage4a-physical.json
+            experiments/stage4a/manifest.json
+      - name: Archive available files from a failed build
+        if: failure() && steps.preflight.outcome == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: stage4a-failed-flow
+          path: |
+            src/
+            runs/wokwi/
 
   precheck:
     needs: gds
     runs-on: ubuntu-24.04
     steps:
       - uses: TinyTapeout/tt-gds-action/precheck@ttgf26c
+        with:
+          tools-ref: ${{ needs.gds.outputs.tools_sha }}
 
   gl_test:
     needs: gds
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: TinyTapeout/tt-gds-action/gl_test@ttgf26c
         with:
           test-dir: test

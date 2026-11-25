@@ -35,5 +35,17 @@
     "*"
   ],
   "RUN_POST_GRT_DESIGN_REPAIR": true,
-  "CTS_ROOT_BUFFER": "gf180mcu_fd_sc_mcu7t5v0__clkbuf_8"
+  "CTS_ROOT_BUFFER": "gf180mcu_fd_sc_mcu7t5v0__clkbuf_8",
+  "INSERT_ECO_BUFFERS": [
+    {
+      "target": "_354_/ZN",
+      "buffer": "gf180mcu_fd_sc_mcu7t5v0__buf_1"
+    }
+  ],
+  "meta": {
+    "flow": "Classic",
+    "substituting_steps": {
+      "+OpenROAD.RepairDesignPostGRT": "Odb.InsertECOBuffers"
+    }
+  }
 }

@@ -1,5 +1,5 @@
 {
-  "variant": "c02-targeted-slew",
+  "variant": "c02a-verifier-fix",
   "reference_commit": "96ff2025df99f416a7e48a39f40d3ddc8ced6c3b",
   "reference_run": 45544273443,
   "action": "TinyTapeout/tt-gds-action@df73a1e7b52e940423ff55f9354b2b8140d38cb7",
@@ -157,7 +157,7 @@
     ]
   },
   "tools_sha": "7d2d2ef5261eb1df16d0bc342834d48a8a276881",
-  "parent_commit": "440d2e9806ec43f0b3547496598f3d55edb9f5d9",
+  "parent_commit": "78fbad59a2fd8b63d59f5cfc96e26c2dd85de06c",
   "sdc_sha256": "1fba062a9a20f36d6f5134e7e9e48648d8ebd0eb60032d127962a384ae0d8cf6",
   "area_limit_um2": 11200,
   "area_goal_um2": 9600,
@@ -190,8 +190,7 @@
     ".github/workflows/gds.yaml",
     "docs/stage4a-experiment.md",
     "experiments/stage4a/manifest.json",
-    "experiments/stage4a/verify.py",
-    "src/config.json"
+    "experiments/stage4a/verify.py"
   ],
   "c01": {
     "run_id": 45571853233,
@@ -604,5 +603,11 @@
       "wire24": "buf_1",
       "wire28": "buf_1"
     }
+  },
+  "c02_evidence": {
+    "commit": "78fbad59a2fd8b63d59f5cfc96e26c2dd85de06c",
+    "gds_run_id": 45581126610,
+    "gds_attempt": 1,
+    "rtl_run_id": 45580828585
   }
 }

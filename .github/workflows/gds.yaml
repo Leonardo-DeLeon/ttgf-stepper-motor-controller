@@ -1,6 +1,6 @@
 name: gds
 
-run-name: GF180 C02 · ${{ github.ref_name }} · ${{ github.sha }}
+run-name: GF180 C02a · ${{ github.ref_name }} · ${{ github.sha }}
 on: workflow_dispatch
 
 permissions:

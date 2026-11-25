@@ -55,9 +55,9 @@ def verify_revision(manifest):
         return subprocess.check_output(["git", "-C", str(ROOT), *args], text=True).strip()
 
     match("checkout commit", git("rev-parse", "HEAD"), os.environ["GITHUB_SHA"])
-    match("direct C01 parent", git("show", "-s", "--format=%P", "HEAD"), manifest["parent_commit"])
+    match("direct C02 parent", git("show", "-s", "--format=%P", "HEAD"), manifest["parent_commit"])
     match("workflow branch", os.environ["GITHUB_REF"], "refs/heads/experiment/stage4a-electrical")
-    match("changed paths since C01",
+    match("changed paths since C02",
           sorted(git("diff", "--no-renames", "--name-only", manifest["parent_commit"], "HEAD").splitlines()),
           manifest["publish_paths"])
 
@@ -104,6 +104,7 @@ def identify(manifest, tools_sha):
         "ref": os.environ["GITHUB_REF"],
         "config_sha256": manifest["input_sha256"]["src/config.json"],
         "action": manifest["action"],
+        "c02_evidence": manifest["c02_evidence"],
         "tools_sha": tools_sha,
         "run_url": f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
     }
@@ -403,8 +404,9 @@ def verify_routed_eco(state, manifest):
     master = result["master"]
     signal_pins = {"I": spec["split_net"], "Z": spec["net"]}
     match("routed ECO logical netlist cell", instances[name], (master, signal_pins))
-    match("routed ECO powered netlist cell", powered[name],
-          (master, {**signal_pins, "VDD": "VPWR", "VSS": "VGND"}))
+    # GF180's powered physical netlist exposes both rails and both well-bias pins.
+    powered_pins = {**signal_pins, "VDD": "VPWR", "VNW": "VPWR", "VPW": "VGND", "VSS": "VGND"}
+    match("routed ECO powered netlist cell", powered[name], (master, powered_pins))
     return result
 
 

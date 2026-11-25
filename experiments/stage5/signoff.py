@@ -2,9 +2,10 @@
 
 import argparse
 from collections import Counter
+from datetime import datetime
 from fnmatch import fnmatchcase
 from decimal import Decimal as D
-from importlib.metadata import version
+from importlib.metadata import PackageNotFoundError, version
 import math
 from pathlib import Path
 import re
@@ -129,15 +130,73 @@ def verify_lef(path, units, ports):
                       for _, _, _, _, layer, *coords in expected))
 
 
-def verify_streams(gds, oasis, inventory, ports, units):
-    match("KLayout Python version", version("klayout"), "0.30.14")
+def stream_labels(cells, index):
+    labels = Counter()
+    orientations = {}
+    for cell_name, cell in cells.items():
+        for shape in cell.shapes(index).each():
+            if shape.is_text():
+                label = shape.text
+                transform = label.trans
+                key = (cell_name, label.string, transform.disp.x, transform.disp.y)
+                labels[key] += 1
+                orientations.setdefault(key, Counter())[(90 * transform.angle, transform.is_mirror())] += 1
+    return labels, orientations
+
+
+def orientation_counts(counts):
+    return [{"rotation_degrees": angle, "mirror": mirror, "count": count}
+            for (angle, mirror), count in sorted(counts.items())]
+
+
+def record_layer_result(report, layer, datatype, first, second, xor_shapes, xor_area):
+    first_labels, first_orientation = first
+    second_labels, second_orientation = second
+    row = {"layer": layer, "datatype": datatype, "gds_labels": sum(first_labels.values()),
+           "oasis_labels": sum(second_labels.values()), "labels_equal": first_labels == second_labels,
+           "xor_shapes": xor_shapes, "xor_area_dbu2": xor_area}
+    report["layers"].append(row)
+    for key in sorted(first_labels.keys() & second_labels.keys()):
+        if first_labels[key] == second_labels[key] and first_orientation[key] != second_orientation[key]:
+            cell_name, label, x, y = key
+            report["orientation_differences"].append({
+                "cell": cell_name, "name": label, "x_dbu": x, "y_dbu": y,
+                "layer": layer, "datatype": datatype,
+                "gds": orientation_counts(first_orientation[key]),
+                "oasis": orientation_counts(second_orientation[key]),
+            })
+    if not row["labels_equal"]:
+        row["gds_only_labels"] = sorted((first_labels - second_labels).items())
+        row["oasis_only_labels"] = sorted((second_labels - first_labels).items())
+
+
+def verify_layer_results(report):
+    rows = report["layers"]
+    report["xor_shapes"] = sum(row["xor_shapes"] for row in rows)
+    mismatch = [(row["layer"], row["datatype"]) for row in rows if not row["labels_equal"]]
+    match("GDSII/OASIS semantic label mismatches by layer", mismatch, [])
+    mismatch = [(row["layer"], row["datatype"]) for row in rows if row["xor_shapes"]]
+    match("GDSII/OASIS nonzero XOR layers", mismatch, [])
+
+
+def verify_streams(gds, oasis, inventory, ports, units, report):
+    expected_version = read_json(IDENTITY)["runtime"]["klayout"]
+    try:
+        installed_version = version("klayout")
+    except PackageNotFoundError as error:
+        raise ValueError(f"KLayout Python package {expected_version} is unavailable") from error
+    match("KLayout Python version", installed_version, expected_version)
     import klayout.db as kdb
 
-    layouts = []
-    layer_sets = []
+    streams = []
     for path in (gds, oasis):
         layout = kdb.Layout()
         layout.read(str(file_nonempty(path)))
+        streams.append(layout)
+    match("GDSII/OASIS DBU", streams[0].dbu, streams[1].dbu)
+
+    layouts = []
+    for path, layout in zip((gds, oasis), streams):
         tops = layout.top_cells()
         match(f"{path.name} top", [cell.name for cell in tops], [TOP])
         cell = tops[0]
@@ -146,22 +205,34 @@ def verify_streams(gds, oasis, inventory, ports, units):
         def coordinates(box):
             return tuple(D(value) * scale for value in (box.left, box.bottom, box.right, box.top))
 
-        boundary = [shape for shape in cell.shapes(layout.layer(0, 0)).each() if not shape.is_text()]
+        layer_info = [(index, layout.get_info(index)) for index in layout.layer_indexes()]
+        layers = {(info.layer, info.datatype): index for index, info in layer_info}
+        require((0, 0) in layers, f"{path.name} missing PR boundary layer")
+        boundary_index = layers[0, 0]
+        boundary = [shape for shape in cell.shapes(boundary_index).each() if not shape.is_text()]
         match(f"{path.name} PR boundary", len(boundary), 1)
-        match(f"{path.name} PR bbox", coordinates(boundary[0].bbox()), DIE)
+        shape, = boundary
+        match(f"{path.name} PR bbox", coordinates(shape.bbox()), DIE)
+        expected_boundary = kdb.Region(shape.bbox())
+        actual_boundary = kdb.Region(shape.box if shape.is_box() else shape.polygon)
+        require((expected_boundary ^ actual_boundary).is_empty(),
+                f"{path.name} PR boundary is not rectangular")
         match(f"{path.name} overall bbox", coordinates(cell.bbox()), DIE)
         drawing_layers = {"Metal2": 36, "Metal3": 42, "Metal4": 46}
         for pin, shapes in ports.items():
             metal = drawing_layers[shapes[0][4]]
-            label_shapes = cell.shapes(layout.layer(metal, 10))
+            require((metal, 10) in layers, f"Missing marker layer {metal}/10")
+            label_shapes = cell.shapes(layers[metal, 10])
             labels = [(D(shape.text.trans.disp.x) * scale, D(shape.text.trans.disp.y) * scale)
                       for shape in label_shapes.each() if shape.is_text() and name(shape.text.string) == pin]
             require(labels, f"Missing top-level label {pin} at {metal}/10")
             for _, _, _, _, _, x1, y1, x2, y2 in shapes:
                 require(any(D(x1)/units <= x <= D(x2)/units and D(y1)/units <= y <= D(y2)/units
                             for x, y in labels), f"No label inside {pin} access rectangle")
-        for leaf in layout.each_cell():
-            for layer in layout.layer_indexes():
+        cells = {entry.name: entry for entry in layout.each_cell()}
+        placements = {}
+        for leaf in cells.values():
+            for layer in layers.values():
                 for shape in leaf.shapes(layer).each():
                     polygon = None
                     if shape.is_box():
@@ -172,24 +243,34 @@ def verify_streams(gds, oasis, inventory, ports, units):
                         polygon = shape.path.polygon()
                     if polygon is not None:
                         require(polygon.area() > 0, f"Zero area in {path.name}/{leaf.name}/{layer}")
+            placements[leaf.name] = Counter(
+                (instance.cell.name, transform.disp.x, transform.disp.y,
+                 transform.angle, transform.is_mirror(), transform.mag)
+                for instance in leaf.each_inst() for transform in instance.cell_inst.each_cplx_trans())
         refs = Counter()
-        for instance in cell.each_inst():
-            refs[instance.cell.name] += max(instance.na, 1) * max(instance.nb, 1)
+        for (master, *_), count in placements[TOP].items():
+            refs[master] += count
         match(f"{path.name} cell inventory", refs, Counter(inventory))
-        layouts.append((layout, cell))
-        layer_sets.append({(layer.layer, layer.datatype) for layer in layout.layer_infos()})
-    (left, left_cell), (right, right_cell) = layouts
-    match("GDSII/OASIS DBU", left.dbu, right.dbu)
-    match("GDSII/OASIS layer sets", layer_sets[0], layer_sets[1])
-    def text_labels(layout, cell, layer, purpose):
-        return Counter((item.text.string, str(item.text.trans))
-                       for item in cell.shapes(layout.layer(layer, purpose)).each() if item.is_text())
-    for layer, purpose in sorted(layer_sets[0]):
-        match(f"GDSII/OASIS top labels on {layer}/{purpose}",
-              text_labels(left, left_cell, layer, purpose), text_labels(right, right_cell, layer, purpose))
-        first = kdb.Region(left_cell.begin_shapes_rec(left.layer(layer, purpose)))
-        second = kdb.Region(right_cell.begin_shapes_rec(right.layer(layer, purpose)))
-        require((first ^ second).is_empty(), f"Nonzero stream XOR on {layer}/{purpose}")
+        layouts.append((cell, layers, cells, placements))
+    (left_cell, left_layers, left_cells, left_placements), (
+        right_cell, right_layers, right_cells, right_placements) = layouts
+    match("GDSII/OASIS layer sets", set(left_layers), set(right_layers))
+    match("GDSII/OASIS cell definitions", set(left_cells), set(right_cells))
+    for cell_name in sorted(left_cells):
+        match(f"GDSII/OASIS instance placements in {cell_name}",
+              left_placements[cell_name], right_placements[cell_name])
+
+    report.update(klayout_version=expected_version, dbu_um=streams[0].dbu, cell_count=len(left_cells),
+                  top_instances=sum(inventory.values()), layers=[], orientation_differences=[])
+    for layer, datatype in sorted(left_layers):
+        pair = layer, datatype
+        left_labels = stream_labels(left_cells, left_layers[pair])
+        right_labels = stream_labels(right_cells, right_layers[pair])
+        first = kdb.Region(left_cell.begin_shapes_rec(left_layers[pair]))
+        second = kdb.Region(right_cell.begin_shapes_rec(right_layers[pair]))
+        xor = first ^ second
+        record_layer_result(report, layer, datatype, left_labels, right_labels, xor.size(), xor.area())
+    verify_layer_results(report)
 
 
 def verify_drc_report(path, clean):
@@ -229,11 +310,15 @@ def verify_gl_xml(gl):
     results = gl / "results.xml"
     if results.is_file():
         match("Gate Level result SHA", text(gl / "results.sha256").split()[0], digest(results))
-    from datetime import datetime
-    start, stop = (datetime.fromisoformat(line.replace("Z", "+00:00"))
-                   for line in text(gl / "execution-window.txt").splitlines())
+    def utc_timestamp(value):
+        instant = re.fullmatch(r"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d{1,9}))?(?:Z|\+00:00)", value)
+        require(instant is not None, f"Invalid UTC Gate Level timestamp: {value}")
+        return datetime.fromisoformat(instant[1]), int((instant[2] or "").ljust(9, "0"))
+
+    start, stop = map(utc_timestamp, text(gl / "execution-window.txt").splitlines())
+    require(start <= stop, "Reversed Gate Level execution window")
     for suite in ET.parse(file_nonempty(results)).getroot().findall("./testsuite"):
-        stamp = datetime.fromisoformat(suite.attrib["timestamp"].replace("Z", "+00:00"))
+        stamp = utc_timestamp(suite.attrib["timestamp"])
         require(start <= stamp <= stop, "Stale Gate Level XML outside test window")
     return test_xml(results, 2)
 
@@ -479,9 +564,8 @@ def verify_final(output, tag, report):
         match(f"{deck} RDB hash", text(drc / f"{deck}.sha256").split()[0], digest(database))
         report["klayout"][deck] = verify_drc_report(database, deck != "density")
     oasis = external / (TOP + ".oas")
-    verify_streams(gds, oasis, report["placement"]["counts_by_master"], report["ports"], units)
     report["stream_equivalence"] = {"gds_sha256": digest(gds), "oasis_sha256": digest(oasis),
-                                    "klayout_version": "0.30.14", "xor_shapes": 0}
+                                    "expected_klayout_version": identity["runtime"]["klayout"]}
 
     gl = external / "gl"
     match("Gate Level exit", text(gl / "status.txt").strip(), "0")
@@ -505,6 +589,8 @@ def verify_final(output, tag, report):
     report["gate_level_cases"] = verify_gl_xml(gl)
     report["signoff_execution"] = execution
     report["gate_level_mode"] = "functional_1MHz"
+    verify_streams(gds, oasis, report["placement"]["counts_by_master"], report["ports"], units,
+                   report["stream_equivalence"])
     report["status"] = "macro_checks_passed_upper_level_review_pending"
 
 

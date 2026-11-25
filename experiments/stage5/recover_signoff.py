@@ -16,6 +16,9 @@ CASES = {"finite_full_step", "disable_reset_and_rearm"}
 BENCHES = {"clock_enable": 20, "step_counter": 10, "stepper_controller": 155,
            "stepper_demo": 5, "stepper_fsm": 5, "tiny_tapeout": 3}
 TAR = "e01-continuation.tar.gz"
+ORIGINAL_SIGNOFF = "01caba04a3f8a3cd5f849a6167224e7506b3ccd4"
+FIX_PATHS = (".github/workflows/gds.yaml", "experiments/stage5/recover_signoff.py",
+             "experiments/stage5/signoff.py")
 
 
 def safe_path(value):
@@ -141,11 +144,18 @@ def verify_checkout(repo, manifest):
     match("manual signoff origin",
           tuple(environ[key] for key in ("GITHUB_REF", "GITHUB_REPOSITORY", "GITHUB_EVENT_NAME", "GITHUB_WORKFLOW_REF")),
           (identity["ref"], identity["repository"], "workflow_dispatch", identity["workflow_ref"]))
-    match("current checkout", git(repo, "rev-parse", "HEAD").decode().strip(), environ["GITHUB_SHA"])
-    match("direct signoff parent", git(repo, "show", "-s", "--format=%P", "HEAD").decode().strip(), identity["commit"])
-    match("signoff publication paths",
-          sorted(git(repo, "diff", "--name-only", identity["commit"], "HEAD").decode().splitlines()),
+    head = git(repo, "rev-parse", "HEAD").decode().strip()
+    match("current checkout", head, environ["GITHUB_SHA"])
+    match("direct original signoff parent",
+          git(repo, "show", "-s", "--format=%P", ORIGINAL_SIGNOFF).decode().strip(), identity["commit"])
+    match("original signoff publication paths",
+          sorted(git(repo, "diff", "--name-only", identity["commit"], ORIGINAL_SIGNOFF).decode().splitlines()),
           sorted(manifest["publication_paths"]))
+    match("direct corrective parent", git(repo, "show", "-s", "--format=%P", head).decode().strip(),
+          ORIGINAL_SIGNOFF)
+    match("corrective publication paths",
+          sorted(git(repo, "diff", "--no-renames", "--name-status", ORIGINAL_SIGNOFF, head).decode().splitlines()),
+          [f"M\t{path}" for path in FIX_PATHS])
     verify_inputs(repo, read_json(MANIFEST))
 
 

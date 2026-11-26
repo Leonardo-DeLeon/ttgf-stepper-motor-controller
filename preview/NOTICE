@@ -1,0 +1,13 @@
+Programmable Stepper Motor Controller — ASIC V2.0 Compact (E01)
+Project credit: IEEE Open Silicon Bootcamp 2026 Team (pending confirmation).
+Project: https://github.com/Leonardo-DeLeon/ttgf-stepper-motor-controller
+
+The E01 layout contains standard cells from the GF180MCU 7-track library
+gf180mcu_fd_sc_mcu7t5v0. Copyright 2022 GlobalFoundries PDK Authors.
+Source: https://github.com/google/globalfoundries-pdk-libs-gf180mcu_fd_sc_mcu7t5v0
+
+The project documentation structure and workflow use the Tiny Tapeout
+GF180 Verilog project template.
+Source: https://github.com/TinyTapeout/ttgf-verilog-template
+
+See LICENSE for the Apache License, Version 2.0.

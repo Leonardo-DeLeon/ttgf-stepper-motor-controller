@@ -1,0 +1,51 @@
+name: E01 layout preview
+
+on:
+  push:
+    branches:
+      - experiment/stage6-bootcamp-preview
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Verify E01 viewing files
+        working-directory: preview
+        run: |
+          test -s index.html
+          test -s LICENSE
+          test -s NOTICE
+          sha256sum --check --strict SHA256SUMS
+      - name: Archive E01 viewer for review
+        uses: actions/upload-artifact@v7
+        with:
+          name: e01-layout-preview-${{ github.run_attempt }}
+          path: preview/
+          if-no-files-found: error
+      - name: Link the archived E01 views
+        shell: bash
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import os
+          from urllib.parse import urlencode
+
+          repository = os.environ["GITHUB_REPOSITORY"]
+          commit = os.environ["GITHUB_SHA"]
+          preview = f"https://raw.githubusercontent.com/{repository}/{commit}/preview"
+          oasis = f"{preview}/layout.oas"
+          viewer = urlencode({"pdk": "gf180mcuD", "model": oasis})
+          explorer = urlencode({"pdk": "gf180mcuD", "file": oasis})
+
+          print("## E01 layout preview · GF180D · 160 × 100 µm")
+          print(f"- [2D render]({preview}/layout.png)")
+          print(f"- [Open 3D viewer](https://gds-viewer.tinytapeout.com/?{viewer})")
+          print(f"- [Open Tiny Tapeout Explorer](https://gds-explorer.tinytapeout.com/viewer?{explorer})")
+          print()
+          print("These links are pinned to the reviewed commit. Both online viewers require public access to the OASIS stream.")
+          PY

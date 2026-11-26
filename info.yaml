@@ -1,11 +1,13 @@
-# Metadatos locales. Validar la identidad del módulo con la cuenta de envío.
+# Stage 6C datasheet metadata.
 project:
   title: "Programmable Stepper Motor Controller"
-  author: "Equipo IEEE Open Silicon Bootcamp 2026"
+  author: "IEEE Open Silicon Bootcamp 2026 Team" # Provisional collective attribution, pending confirmation.
   discord: ""
-  description: "Control digital programable para motor a pasos unipolar con driver externo"
+  description: "Programmable controller for a unipolar stepper motor with an external driver"
   language: "Verilog"
   clock_hz: 1000000
+  # Standard GF180D schema value for the datasheet.
+  # Acceptance of the 160 x 100 um E01 outline requires separate confirmation.
   tiles: "1x1"
   top_module: "tt_um_ieee_bootcamp_stepper"
   source_files:

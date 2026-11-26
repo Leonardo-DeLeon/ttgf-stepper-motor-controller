@@ -1,0 +1,24 @@
+name: docs
+
+on:
+  push:
+    branches:
+      - experiment/stage6-bootcamp-preview
+
+permissions:
+  contents: read
+
+jobs:
+  docs:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - name: Build Tiny Tapeout datasheet
+        # ttgf26c, as used by the GF180 Verilog template
+        uses: TinyTapeout/tt-gds-action/docs@df73a1e7b52e940423ff55f9354b2b8140d38cb7
+        with:
+          pdk: gf180mcuD
+          tools-ref: 7d2d2ef5261eb1df16d0bc342834d48a8a276881

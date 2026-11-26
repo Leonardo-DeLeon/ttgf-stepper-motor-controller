@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>E01 layout preview — Programmable Stepper Motor Controller</title>
+  <style>
+    body { max-width: 56rem; margin: 2rem auto; padding: 0 1rem; font: 1rem/1.5 system-ui, sans-serif; }
+    img { display: block; max-width: 100%; height: auto; }
+    a { color: #075a87; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Programmable Stepper Motor Controller</h1>
+    <p>ASIC V2.0 Compact (E01) · GF180D · 160 × 100 µm · 1 MHz</p>
+    <p>Layout preview. Official shuttle compatibility remains pending. The standalone density checks report M2.4, M3.4, M4.4, M5.4, and MT.3.</p>
+    <p><a href="layout.gds" download>GDSII</a> · <a href="layout.oas" download>OASIS</a> · <a href="SHA256SUMS">SHA-256 checksums</a></p>
+    <p id="online-tools" hidden><a id="viewer-3d">Open 3D viewer</a> · <a id="explorer">Open Tiny Tapeout Explorer</a></p>
+    <h2>2D layout</h2>
+    <img src="layout.png" alt="2D render of the 160 by 100 micrometre E01 layout">
+    <p>IEEE Open Silicon Bootcamp 2026 Team (provisional credit). <a href="LICENSE">Apache 2.0 license</a> · <a href="NOTICE">Attribution</a></p>
+  </main>
+  <script>
+    if (location.protocol === "https:") {
+      const stream = new URL("layout.oas", location.href).href;
+      const viewer = new URL("https://gds-viewer.tinytapeout.com/");
+      viewer.search = new URLSearchParams({ pdk: "gf180mcuD", model: stream });
+      const explorer = new URL("https://gds-explorer.tinytapeout.com/viewer");
+      explorer.search = new URLSearchParams({ pdk: "gf180mcuD", file: stream });
+      document.getElementById("viewer-3d").href = viewer.href;
+      document.getElementById("explorer").href = explorer.href;
+      document.getElementById("online-tools").hidden = false;
+    }
+  </script>
+</body>
+</html>

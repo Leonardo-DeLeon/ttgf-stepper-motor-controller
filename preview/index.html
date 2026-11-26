@@ -3,35 +3,38 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>E01 layout preview — Programmable Stepper Motor Controller</title>
+  <title>Programmable Stepper Motor Controller — IEEE Open Silicon Bootcamp 2026</title>
   <style>
     body { max-width: 56rem; margin: 2rem auto; padding: 0 1rem; font: 1rem/1.5 system-ui, sans-serif; }
     img { display: block; max-width: 100%; height: auto; }
     a { color: #075a87; }
+    h2 { margin-top: 1.75rem; }
+    code { overflow-wrap: anywhere; }
   </style>
 </head>
 <body>
   <main>
     <h1>Programmable Stepper Motor Controller</h1>
+    <p>IEEE Open Silicon Bootcamp 2026</p>
     <p>ASIC V2.0 Compact (E01) · GF180D · 160 × 100 µm · 1 MHz</p>
-    <p>Layout preview. Official shuttle compatibility remains pending. The standalone density checks report M2.4, M3.4, M4.4, M5.4, and MT.3.</p>
-    <p><a href="layout.gds" download>GDSII</a> · <a href="layout.oas" download>OASIS</a> · <a href="SHA256SUMS">SHA-256 checksums</a></p>
-    <p id="online-tools" hidden><a id="viewer-3d">Open 3D viewer</a> · <a id="explorer">Open Tiny Tapeout Explorer</a></p>
+    <p>This ASIC controls a 5 V 28BYJ-48 unipolar stepper motor through an external ULN2003 driver. It supports clockwise and counterclockwise rotation, two-phase full steps, half steps, and continuous or finite moves.</p>
+    <p><a href="datasheet.pdf">Datasheet (PDF)</a> · <a href="layout.gds" download>Download GDSII</a> · <a href="layout.oas" download>Download OASIS</a> · <a href="SHA256SUMS">SHA-256 checksums</a></p>
+    <p>
+      <a href="https://gds-viewer.tinytapeout.com/?pdk=gf180mcuD&amp;model=https%3A%2F%2Fraw.githubusercontent.com%2FLeonardo-DeLeon%2Fttgf-stepper-motor-controller%2F96a09e35f0a8f2d1d5ffa6009e07b15fe0397b87%2Fpreview%2Flayout.oas">Open 3D viewer</a> ·
+      <a href="https://gds-explorer.tinytapeout.com/viewer?pdk=gf180mcuD&amp;file=https%3A%2F%2Fraw.githubusercontent.com%2FLeonardo-DeLeon%2Fttgf-stepper-motor-controller%2F96a09e35f0a8f2d1d5ffa6009e07b15fe0397b87%2Fpreview%2Flayout.oas">Open Tiny Tapeout Explorer</a>
+    </p>
     <h2>2D layout</h2>
     <img src="layout.png" alt="2D render of the 160 by 100 micrometre E01 layout">
+    <h2>Verification</h2>
+    <ul>
+      <li>RTL regression passed 198/198 Icarus tests and 2/2 cocotb tests. <a href="https://github.com/Leonardo-DeLeon/ttgf-stepper-motor-controller/actions/runs/45731133669">RTL run</a></li>
+      <li>The standalone macro passed static timing and electrical checks in all nine corners at 1 MHz. Worst setup and hold slack were +790.524063 ns and +0.145554 ns. <a href="https://github.com/Leonardo-DeLeon/ttgf-stepper-motor-controller/actions/runs/45670862905">Physical implementation run</a></li>
+      <li>Standalone signoff reported zero geometric DRC and antenna violations, a unique LVS match, and 2/2 gate-level tests. GDSII and OASIS had zero geometric XOR differences across 24 layer/datatype pairs. <a href="https://github.com/Leonardo-DeLeon/ttgf-stepper-motor-controller/actions/runs/45702521852">Signoff run</a></li>
+    </ul>
+    <p>Acceptance of the compact outline for shuttle integration and fabrication approval remain pending. Five standalone density violations remain open (M2.4, M3.4, M4.4, M5.4, and MT.3).</p>
+    <h2>Provenance and attribution</h2>
+    <p>The 2D render and both streams are the original E01 views published in commit <a href="https://github.com/Leonardo-DeLeon/ttgf-stepper-motor-controller/tree/96a09e35f0a8f2d1d5ffa6009e07b15fe0397b87/preview"><code>96a09e35f0a8f2d1d5ffa6009e07b15fe0397b87</code></a>. The datasheet is the reviewed PDF from the <a href="https://github.com/Leonardo-DeLeon/ttgf-stepper-motor-controller/actions/runs/45731133739">same commit’s datasheet run</a>.</p>
     <p>IEEE Open Silicon Bootcamp 2026 Team (provisional credit). <a href="LICENSE">Apache 2.0 license</a> · <a href="NOTICE">Attribution</a></p>
   </main>
-  <script>
-    if (location.protocol === "https:") {
-      const stream = new URL("layout.oas", location.href).href;
-      const viewer = new URL("https://gds-viewer.tinytapeout.com/");
-      viewer.search = new URLSearchParams({ pdk: "gf180mcuD", model: stream });
-      const explorer = new URL("https://gds-explorer.tinytapeout.com/viewer");
-      explorer.search = new URLSearchParams({ pdk: "gf180mcuD", file: stream });
-      document.getElementById("viewer-3d").href = viewer.href;
-      document.getElementById("explorer").href = explorer.href;
-      document.getElementById("online-tools").hidden = false;
-    }
-  </script>
 </body>
 </html>
